@@ -138,6 +138,8 @@ set(SRC
   engines/overlay/overlay_sculpt.c
   engines/overlay/overlay_shader.c
   engines/overlay/overlay_wireframe.c
+  engines/custom/custom_engine.c
+  engines/custom/custom_render.c
 
   DRW_engine.h
   DRW_select_buffer.h
@@ -167,6 +169,8 @@ set(SRC
   engines/select/select_private.h
   engines/overlay/overlay_engine.h
   engines/overlay/overlay_private.h
+  engines/custom/custom_engine.h
+  engines/custom/custom_private.h
 )
 
 set(LIB
