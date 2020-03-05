@@ -17,14 +17,6 @@ typedef struct CUSTOM_PassList {
 
 typedef struct CUSTOM_PrivateData {
 	DRWShadingGroup* shgrp;
-
-  bool hide_overlays;
-
-  View3DOverlay overlay;
-
-  //shading data
-  float wire_step_param;
-
 } CUSTOM_PrivateData;
 typedef struct CUSTOM_StorageList {
 	struct CUSTOM_PrivateData* pd;
@@ -49,4 +41,4 @@ void custom_render_update_passes(struct RenderEngine* engine,
 GPUShader *CUSTOM_shader(void);
 void CUSTOM_shader_free(void);
 
-#endif /* __EEVEE_PRIVATE_H__ */
+#endif /* __CUSTOM_PRIVATE_H__ */

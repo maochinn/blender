@@ -25,15 +25,6 @@ static void custom_engine_init(void *vedata)
     stl->pd = MEM_callocN(sizeof(*stl->pd), __func__);
 
   CUSTOM_PrivateData *pd = stl->pd;
-
-  pd->hide_overlays = (v3d->flag2 & V3D_HIDE_OVERLAYS) != 0;
-  if (!stl->pd->hide_overlays)
-    stl->pd->overlay = v3d->overlay;
-  else
-    memset(&stl->pd->overlay, 0, sizeof(stl->pd->overlay));
-
-  if (v3d->shading.type == OB_WIRE)
-    stl->pd->overlay.flag |= V3D_OVERLAY_WIREFRAMES;
 }
 
 static void custom_engine_free(void)
@@ -49,8 +40,6 @@ static void custom_cache_init(void *vedata)
   const DRWContextState *draw_ctx = DRW_context_state_get();
 
   View3DShading *shading = &draw_ctx->v3d->shading;
-
-  pd->wire_step_param = pd->overlay.wireframe_threshold - 254.0f / 255.0f;
 
   bool is_wire_shmode = (shading->type == OB_WIRE);
   bool is_material_shmode = (shading->type > OB_SOLID);
@@ -68,7 +57,7 @@ static void custom_cache_init(void *vedata)
 
   DRWShadingGroup *grp = pd->shgrp = DRW_shgroup_create(shader, pass);
   DRW_shgroup_uniform_block_persistent(grp, "globalsBlock", G_draw.block_ubo);
-  DRW_shgroup_uniform_float_copy(grp, "wireStepParam", pd->wire_step_param);
+  DRW_shgroup_uniform_float_copy(grp, "wireStepParam", 1.0f);
   DRW_shgroup_uniform_bool_copy(grp, "useColoring", true);
   DRW_shgroup_uniform_bool_copy(grp, "isTransform", (G.moving & G_TRANSFORM_OBJ) != 0);
   DRW_shgroup_uniform_bool_copy(grp, "isObjectColor", false);
