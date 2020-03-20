@@ -25,6 +25,6 @@ void main()
   fragColor.rgb = finalColor;
   fragColor.a = 1.0;
 #endif
-
+  fragColor = vector;
   // fragColor = vec4(1.0, 0.0, 0.0, 1.0);
 }

@@ -138,8 +138,10 @@ set(SRC
   engines/overlay/overlay_sculpt.c
   engines/overlay/overlay_shader.c
   engines/overlay/overlay_wireframe.c
+  engines/custom/custom_data.c
   engines/custom/custom_engine.c
   engines/custom/custom_render.c
+  engines/custom/custom_ray_tracer.c
 
   DRW_engine.h
   DRW_select_buffer.h
@@ -171,6 +173,7 @@ set(SRC
   engines/overlay/overlay_private.h
   engines/custom/custom_engine.h
   engines/custom/custom_private.h
+  engines/custom/custom_ray_tracer.h
 )
 
 set(LIB
@@ -388,6 +391,7 @@ data_to_c_simple(engines/overlay/shaders/wireframe_frag.glsl SRC)
 
 data_to_c_simple(engines/custom/shaders/custom_vert.glsl SRC)
 data_to_c_simple(engines/custom/shaders/custom_frag.glsl SRC)
+data_to_c_simple(engines/custom/shaders/custom_uniform_lib.glsl SRC)
 
 list(APPEND INC
 )

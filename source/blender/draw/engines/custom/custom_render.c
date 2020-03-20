@@ -27,7 +27,9 @@
 extern char datatoc_common_view_lib_glsl[];
 extern char datatoc_common_globals_lib_glsl[];
 extern char datatoc_gpu_shader_common_obinfos_lib_glsl[];
-// vertex shader
+
+extern char datatoc_custom_uniform_lib_glsl[];
+    // vertex shader
 extern char datatoc_custom_vert_glsl[];
 // fragment shadet
 extern char datatoc_custom_frag_glsl[];
@@ -61,7 +63,10 @@ GPUShader *CUSTOM_shader(void)
                                  datatoc_gpu_shader_common_obinfos_lib_glsl,
                                  datatoc_custom_vert_glsl,
                                  NULL},
-        .frag = (const char *[]){datatoc_common_view_lib_glsl, datatoc_custom_frag_glsl, NULL},
+        .frag = (const char *[]){datatoc_common_view_lib_glsl,
+                                 datatoc_custom_uniform_lib_glsl,
+                                 datatoc_custom_frag_glsl,
+                                 NULL},
         .defs = (const char *[]){sh_cfg->def, NULL},
     });
   }
