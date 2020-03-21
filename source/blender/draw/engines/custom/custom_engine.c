@@ -81,10 +81,38 @@ static void custom_cache_populate(void *vedata, Object *ob)
   CUSTOM_PrivateData *pd = data->stl->pd;
 
   if (ob->type == OB_MESH) {
-    CUSTOM_Sphere *sphere = CUSTOM_SphereCreate(ob->loc, 0.5f);
-    BLI_addtail(&pd->world, sphere);
-    sphere = CUSTOM_SphereCreate((float[3]){ob->loc[0], ob->loc[1], ob->loc[2] - 100.5f}, 100.0f);
-    BLI_addtail(&pd->world, sphere);
+    BLI_addtail(&pd->world,
+                CUSTOM_SphereCreate(
+                    ob->loc,
+                    0.5f,
+                    (CUSTOM_Material *)CUSTOM_LambertianCreate((float[3]){0.8f, 0.3f, 0.3f})));
+    BLI_addtail(&pd->world,
+                CUSTOM_SphereCreate(
+                    (float[3]){ob->loc[0], ob->loc[1], ob->loc[2] - 100.5f},
+                    100.0f,
+                    (CUSTOM_Material *)CUSTOM_LambertianCreate((float[3]){0.8f, 0.8f, 0.0f}))); 
+    BLI_addtail(&pd->world,
+                CUSTOM_SphereCreate(
+                    (float[3]){ob->loc[0] + 1.0f, ob->loc[1], ob->loc[2]},
+                    0.5f,
+                    (CUSTOM_Material *)CUSTOM_MetalCreate((float[3]){0.8f, 0.6f, 0.2f}, 0.3f)));
+    BLI_addtail(&pd->world,
+                CUSTOM_SphereCreate((float[3]){ob->loc[0] - 1.0f, ob->loc[1], ob->loc[2]},
+                                    0.5f,
+                                    (CUSTOM_Material *)CUSTOM_DielectricCreate(1.5f)));
+    BLI_addtail(&pd->world,
+                CUSTOM_SphereCreate((float[3]){ob->loc[0] - 1.0f, ob->loc[1], ob->loc[2]},
+                                    -0.45f,
+                                    (CUSTOM_Material *)CUSTOM_DielectricCreate(1.5f)));
+    BLI_addtail(&pd->world,
+                CUSTOM_SphereCreate(
+                    (float[3]){ob->loc[0], ob->loc[1] + 1.0f, ob->loc[2]},
+                    0.5f,
+                    (CUSTOM_Material *)CUSTOM_MetalCreate((float[3]){0.8f, 0.8f, 0.8f}, 1.0f)));
+    BLI_addtail(&pd->world,
+                CUSTOM_SphereCreate((float[3]){ob->loc[0], ob->loc[1]-1.0f, ob->loc[2]},
+                                    0.5f,
+                                    (CUSTOM_Material *)CUSTOM_DielectricCreate(1.5f)));
   }
   else if (ob->type == OB_CAMERA) {
     Camera *cam = ob->data;
@@ -100,8 +128,8 @@ static void custom_cache_populate(void *vedata, Object *ob)
                                      focallength_to_fov(cam->lens, sensor),
                                      cam->sensor_x / cam->sensor_y,
                                      // size[0] / size[1],
-                                     0,
-                                     1.0f);
+                                     cam->dof.aperture_fstop,
+                                     cam->dof.focus_distance);
   }
 }
 
@@ -120,28 +148,27 @@ static void custom_draw_scene(void *vedata)
 
   const float *size = DRW_viewport_size_get();
   CUSTOM_Vector *frame = NULL;
-  int wdt = (int)size[0] / 4;
-  int hgt = (int)size[1] / 4;
+  int wdt = (int)size[0] / 2;
+  int hgt = (int)size[1] / 2;
   CUSTOM_ImageCreate(&frame, wdt, hgt);
 
   if (pd->world.first != NULL) {
     int nx = (float)wdt / (float)hgt < pd->camera->aspect ? wdt : (int)((float)hgt * pd->camera->aspect);
     int ny = (int)((float)nx / pd->camera->aspect);
-    int ns = 4;
+    int ns = 10;
 
-    int offset_x = (wdt - nx) / 2;
-    int offset_y = (hgt - ny) / 2;
-
+    int offset_x = (wdt - nx);
+    int offset_y = (hgt - ny);
 
     for (int j = ny - 1; j >= 0; j--)
       for (int i = 0; i < nx; i++) {
         float color[3];
         zero_v3(color);
         for (int s = 0; s < ns; s++) {
-          float u = (float)(i + random_float()) / (float)nx;
-          float v = (float)(j + random_float()) / (float)ny;
+          float u = (float)(i + randomFloat()) / (float)nx;
+          float v = (float)(j + randomFloat()) / (float)ny;
           CUSTOM_Ray ray = CUSTOM_CameraGetRay(pd->camera, u, v);
-          add_v3_v3(color, CUSTOM_sampleColor(&ray, &pd->world).vec3);
+          add_v3_v3(color, CUSTOM_sampleColor(&ray, &pd->world, 0).vec3);
         }
         mul_v3_fl(color, 1.0f / (float)ns);
         copy_v3_fl3(color, sqrt(color[0]), sqrt(color[1]), sqrt(color[2]));

@@ -2824,8 +2824,8 @@ void DRW_engines_register(void)
   RE_engines_register(&DRW_engine_viewport_eevee_type);
   RE_engines_register(&DRW_engine_viewport_workbench_type);
 
-  RE_engines_register(&DRW_engine_viewport_external_type);
-  RE_engines_register(&DRW_engine_viewport_basic_type);
+  //RE_engines_register(&DRW_engine_viewport_external_type);
+  //RE_engines_register(&DRW_engine_viewport_basic_type);
   
   RE_engines_register(&DRW_engine_custom_type);
 
