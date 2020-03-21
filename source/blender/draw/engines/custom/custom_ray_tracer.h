@@ -1,5 +1,6 @@
 #pragma once
 
+//vector 4
 typedef union CUSTOM_Vector {
   struct {
     float x, y, z, w;
@@ -7,6 +8,9 @@ typedef union CUSTOM_Vector {
   struct {
     float s, t, p, q;
   };
+  struct {
+    float r, g, b, a;
+ };
   float vec2[2];
   float vec3[3];
   float vec4[4];
@@ -53,6 +57,7 @@ typedef struct CUSTOM_Camera {
   CUSTOM_Vector horizontal;
   CUSTOM_Vector vertical;
   CUSTOM_Vector u, v, w;
+  float aspect;
   float lens_radius;
 } CUSTOM_Camera;
 
@@ -65,6 +70,8 @@ CUSTOM_Camera *CUSTOM_CameraCreate(float lookfrom[3],
                                    float aperture,
                                    float focus_dist);
 CUSTOM_Ray CUSTOM_CameraGetRay(const CUSTOM_Camera *cam, float u, float v);
+
 CUSTOM_Sphere *CUSTOM_SphereCreate(float center[3], float r);
+void CUSTOM_ImageCreate(CUSTOM_Vector **image, const int wdt, const int hgt);
 
 inline float random_float() {  return rand() / (RAND_MAX + 1.0);}
