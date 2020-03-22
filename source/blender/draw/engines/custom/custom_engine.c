@@ -148,8 +148,8 @@ static void custom_draw_scene(void *vedata)
 
   const float *size = DRW_viewport_size_get();
   CUSTOM_Vector *frame = NULL;
-  int wdt = (int)size[0] / 2;
-  int hgt = (int)size[1] / 2;
+  int wdt = (int)size[0]/2;
+  int hgt = (int)size[1]/2;
   CUSTOM_ImageCreate(&frame, wdt, hgt);
 
   if (pd->world.first != NULL) {
@@ -157,8 +157,8 @@ static void custom_draw_scene(void *vedata)
     int ny = (int)((float)nx / pd->camera->aspect);
     int ns = 10;
 
-    int offset_x = (wdt - nx);
-    int offset_y = (hgt - ny);
+    int offset_x = (wdt - nx)/2;
+    int offset_y = (hgt - ny)/2;
 
     for (int j = ny - 1; j >= 0; j--)
       for (int i = 0; i < nx; i++) {
