@@ -397,6 +397,29 @@ class RENDER_PT_eevee_sampling(RenderButtonsPanel, Panel):
         col = layout.column()
         col.prop(props, "use_taa_reprojection")
 
+class RENDER_PT_custom_sampling(RenderButtonsPanel, Panel):
+    bl_label = "Sampling"
+    COMPAT_ENGINES = {'PBRT_CUSTOM'}
+
+    @classmethod
+    def poll(cls, context):
+        return (context.engine in cls.COMPAT_ENGINES)
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False  # No animation.
+
+        scene = context.scene
+        props = scene.custom
+
+        col = layout.column(align=True)
+        col.prop(props, "render_samples", text="Render")
+        col.prop(props, "viewport_samples", text="Viewport")
+
+        col = layout.column()
+        col.prop(props, "use_taa_reprojection")
+
 
 class RENDER_PT_eevee_indirect_lighting(RenderButtonsPanel, Panel):
     bl_label = "Indirect Lighting"
@@ -665,6 +688,7 @@ class RENDER_PT_simplify_greasepencil(RenderButtonsPanel, Panel, GreasePencilSim
 classes = (
     RENDER_PT_context,
     RENDER_PT_eevee_sampling,
+    RENDER_PT_custom_sampling,
     RENDER_PT_eevee_ambient_occlusion,
     RENDER_PT_eevee_bloom,
     RENDER_PT_eevee_depth_of_field,
