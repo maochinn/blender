@@ -1666,6 +1666,11 @@ typedef struct SceneEEVEE {
   float light_threshold;
 } SceneEEVEE;
 
+typedef struct SceneCUSTOM {
+  int viewport_samples;
+  int render_samples;
+} SceneCUSTOM;
+
 /* *************************************************************** */
 /* Scene ID-Block */
 
@@ -1797,6 +1802,7 @@ typedef struct Scene {
 
   struct SceneDisplay display;
   struct SceneEEVEE eevee;
+  struct SceneCUSTOM custom;
 } Scene;
 
 /* **************** RENDERDATA ********************* */

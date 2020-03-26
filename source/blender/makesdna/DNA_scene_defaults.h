@@ -235,6 +235,12 @@
                     SCE_EEVEE_SSR_HALF_RESOLUTION | SCE_EEVEE_SHADOW_SOFT, \
   }
 
+#define _DNA_DEFAULT_SceneCUSTOM \
+  { \
+    .viewport_samples = 4, \
+    .render_samples = 16, \
+  }
+
 #define _DNA_DEFAULT_Scene \
   { \
     .cursor = _DNA_DEFAULT_View3DCursor, \
@@ -248,6 +254,8 @@
     .safe_areas = _DNA_DEFAULT_DisplaySafeAreas, \
  \
     .eevee = _DNA_DEFAULT_SceneEEVEE, \
+ \
+    .custom = _DNA_DEFAULT_SceneCUSTOM\
   }
 
 /** \} */

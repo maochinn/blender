@@ -21,7 +21,7 @@
 #include "custom_ray_tracer.h"
 ///
 
-#define CUSTOM_ENGINE "MAOCHINN_CUSTOM"
+#define CUSTOM_ENGINE "PBRT_CUSTOM"
 
 static void custom_engine_init(void *vedata)
 {
@@ -117,17 +117,26 @@ static void custom_cache_populate(void *vedata, Object *ob)
   else if (ob->type == OB_CAMERA) {
     Camera *cam = ob->data;
     const float *size = DRW_viewport_size_get();
+    CameraParams params;
     float sensor = BKE_camera_sensor_size(cam->sensor_fit, cam->sensor_x, cam->sensor_y);
 
     float look_at[3];
     sub_v3_v3v3(look_at, ob->loc, ob->obmat[2]);
 
+    const DRWContextState *draw_ctx = DRW_context_state_get();
+    const Scene *scene = draw_ctx->scene;
+    int resolution_x = scene->r.xsch;
+    int resolution_y = scene->r.ysch;
+
+    float aspect = (float)resolution_x / (float)resolution_y;
+    //float aspect = cam->sensor_x / cam->sensor_y;
+    //float aspect = size[0] / size[1];
+
     pd->camera = CUSTOM_CameraCreate(ob->loc,
                                      look_at,
                                      (float[3]){0.0f, 0.0f, 1.0f},
                                      focallength_to_fov(cam->lens, sensor),
-                                     cam->sensor_x / cam->sensor_y,
-                                     // size[0] / size[1],
+                                     aspect,
                                      cam->dof.aperture_fstop,
                                      cam->dof.focus_distance);
   }
@@ -146,16 +155,23 @@ static void custom_draw_scene(void *vedata)
 
   CUSTOM_ViewLayerData *vldata = CUSTOM_view_layer_data_ensure();
 
+
+
   const float *size = DRW_viewport_size_get();
   CUSTOM_Vector *frame = NULL;
-  int wdt = (int)size[0]/2;
-  int hgt = (int)size[1]/2;
+  int wdt = (int)size[0]/4;
+  int hgt = (int)size[1]/4;
   CUSTOM_ImageCreate(&frame, wdt, hgt);
+
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  const Scene *scene = draw_ctx->scene;
 
   if (pd->world.first != NULL) {
     int nx = (float)wdt / (float)hgt < pd->camera->aspect ? wdt : (int)((float)hgt * pd->camera->aspect);
     int ny = (int)((float)nx / pd->camera->aspect);
-    int ns = 10;
+    //int ns = 10;
+
+    int ns = scene->custom.viewport_samples;
 
     int offset_x = (wdt - nx)/2;
     int offset_y = (hgt - ny)/2;

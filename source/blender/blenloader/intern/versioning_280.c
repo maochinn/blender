@@ -1585,6 +1585,14 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 {
   bool use_collection_compat_28 = true;
 
+  /*custom engine initialization*/
+  if (!DNA_struct_find(fd->filesdna, "SceneCUSTOM")) {
+    for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
+      scene->custom.viewport_samples = 4;
+      scene->custom.render_samples = 16;
+    }
+  }
+
   if (!MAIN_VERSION_ATLEAST(bmain, 280, 0)) {
     use_collection_compat_28 = false;
 

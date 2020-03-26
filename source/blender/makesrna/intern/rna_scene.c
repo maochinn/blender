@@ -1100,6 +1100,11 @@ static char *rna_SceneEEVEE_path(PointerRNA *UNUSED(ptr))
   return BLI_strdup("eevee");
 }
 
+static char *rna_SceneCUSTOM_path(PointerRNA *UNUSED(ptr))
+{
+  return BLI_strdup("custom");
+}
+
 static int rna_RenderSettings_stereoViews_skip(CollectionPropertyIterator *iter,
                                                void *UNUSED(data))
 {
@@ -7006,6 +7011,29 @@ static void rna_def_scene_eevee(BlenderRNA *brna)
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
 }
 
+static void rna_def_scene_custom(BlenderRNA *brna)
+{
+  StructRNA *srna;
+  PropertyRNA *prop;
+
+  srna = RNA_def_struct(brna, "SceneCUSTOM", NULL);
+  RNA_def_struct_path_func(srna, "rna_SceneCUSTOM_path");
+  RNA_def_struct_ui_text(srna, "Scene Display", "Scene display settings for 3d viewport by custom engine");
+
+  /* Samples amount */
+  prop = RNA_def_property(srna, "viewport_samples", PROP_INT, PROP_NONE);
+  RNA_def_property_ui_text(prop, "Viewport Samples", "Number of samples per pixels for rendering");
+  RNA_def_property_range(prop, 1, INT_MAX);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
+  RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
+
+  prop = RNA_def_property(srna, "render_samples", PROP_INT, PROP_NONE);
+  RNA_def_property_ui_text(prop, "Render Samples", "Number of samples per pixels for rendering");
+  RNA_def_property_range(prop, 1, INT_MAX);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
+  RNA_def_property_update(prop, NC_SCENE | ND_RENDER_OPTIONS, NULL);
+
+}
 void RNA_def_scene(BlenderRNA *brna)
 {
   StructRNA *srna;
@@ -7479,6 +7507,11 @@ void RNA_def_scene(BlenderRNA *brna)
   RNA_def_property_struct_type(prop, "SceneEEVEE");
   RNA_def_property_ui_text(prop, "EEVEE", "EEVEE settings for the scene");
 
+  /*CUSTOM engine*/
+  prop = RNA_def_property(srna, "custom", PROP_POINTER, PROP_NONE);
+  RNA_def_property_struct_type(prop, "SceneCUSTOM");
+  RNA_def_property_ui_text(prop, "CUSTOM", "CUSTOM Engine settings for the scene");
+
   /* Nestled Data  */
   /* *** Non-Animated *** */
   RNA_define_animate_sdna(false);
@@ -7496,6 +7529,7 @@ void RNA_def_scene(BlenderRNA *brna)
   rna_def_display_safe_areas(brna);
   rna_def_scene_display(brna);
   rna_def_scene_eevee(brna);
+  rna_def_scene_custom(brna);
   RNA_define_animate_sdna(true);
   /* *** Animated *** */
   rna_def_scene_render_data(brna);

@@ -58,7 +58,7 @@ class RenderOutputButtonsPanel:
 
 class RENDER_PT_dimensions(RenderOutputButtonsPanel, Panel):
     bl_label = "Dimensions"
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH', 'PBRT_CUSTOM'}
 
     _frame_rate_args_prev = None
     _preset_class = None
