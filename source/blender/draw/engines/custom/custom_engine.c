@@ -2132,21 +2132,28 @@ static void custom_cache_populate(void *vedata, Object *ob)
   CUSTOM_PrivateData *pd = data->stl->pd;
 
   if (ob->type == OB_MESH) {
+    //BLI_addtail(&pd->world,
+    //            CUSTOM_SphereCreate(
+    //                ob->loc,
+    //                0.5f,
+    //                CUSTOM_LambertianCreate((float[3]){0.8f, 0.3f, 0.3f},
+    //                                        CUSTOM_ImageTextureCreate(custom_noise, 64, 64))));
     BLI_addtail(&pd->world,
-                CUSTOM_SphereCreate(
-                    ob->loc,
-                    0.5f,
-                    CUSTOM_LambertianCreate((float[3]){0.8f, 0.3f, 0.3f},
-                                            CUSTOM_ImageTextureCreate(custom_noise, 64, 64))));
-    BLI_addtail(
-        &pd->world,
-        CUSTOM_SphereCreate((float[3]){ob->loc[0], ob->loc[1], ob->loc[2] - 100.5f},
-                            100.0f,
-                            CUSTOM_LambertianCreate(
-                                (float[3]){0.8f, 0.8f, 0.0f},
-                                CUSTOM_CheckerTextureCreate(
-                                    CUSTOM_ConstantTextureCreate((float[3]){0.2f, 0.3f, 0.1f}),
-                                    CUSTOM_ConstantTextureCreate((float[3]){0.9f, 0.9f, 0.9f})))));
+                CUSTOM_BoxCreate((float[3]){-0.5f, -0.5f, -0.5f},
+                                 (float[3]){0.5f, 0.5f, 0.5f},
+                                 CUSTOM_LambertianCreate((float[3]){0.73f, 0.0f, 0.0f},
+                                                         CUSTOM_ConstantTextureCreate(
+                                                             (float[3]){0.73f, 0.73f, 0.73f}))));
+
+    //BLI_addtail(
+    //    &pd->world,
+    //    CUSTOM_SphereCreate((float[3]){ob->loc[0], ob->loc[1], ob->loc[2] - 100.5f},
+    //                        100.0f,
+    //                        CUSTOM_LambertianCreate(
+    //                            (float[3]){0.8f, 0.8f, 0.0f},
+    //                            CUSTOM_CheckerTextureCreate(
+    //                                CUSTOM_ConstantTextureCreate((float[3]){0.2f, 0.3f, 0.1f}),
+    //                                CUSTOM_ConstantTextureCreate((float[3]){0.9f, 0.9f, 0.9f})))));
     // BLI_addtail(&pd->world,
     //            CUSTOM_SphereCreate(
     //                (float[3]){ob->loc[0], ob->loc[1], ob->loc[2] - 100.5f},
@@ -2154,14 +2161,54 @@ static void custom_cache_populate(void *vedata, Object *ob)
     //                CUSTOM_LambertianCreate((float[3]){0.8f, 0.8f, 0.0f},
     //                                        CUSTOM_ImageTextureCreate(custom_noise, 64, 64))));
 
+    //BLI_addtail(&pd->world,
+    //        CUSTOM_RectYZCreate(-3.0f,
+    //                            3.0f,
+    //                            -3.0f,
+    //                            3.0f,
+    //                            -3.0f,
+    //                            CUSTOM_LambertianCreate((float[3]){0.5f, 0.5f, 0.3f},
+    //                                                    CUSTOM_ConstantTextureCreate(
+    //                                                        (float[3]){0.5f, 0.5f, 0.5f})),
+    //                            false));
+    //BLI_addtail(&pd->world,
+    //            CUSTOM_RectXZCreate(-3.0f,
+    //                                3.0f,
+    //                                -3.0f,
+    //                                3.0f,
+    //                                -3.0f,
+    //                                CUSTOM_LambertianCreate((float[3]){0.5f, 0.5f, 0.5f},
+    //                                                        CUSTOM_ConstantTextureCreate(
+    //                                                            (float[3]){0.5f, 0.5f, 0.5f})),
+    //                                false));
+    //BLI_addtail(&pd->world,
+    //            CUSTOM_RectXZCreate(-3.0f,
+    //                                3.0f,
+    //                                -3.0f,
+    //                                3.0f,
+    //                                3.0f,
+    //                                CUSTOM_LambertianCreate((float[3]){0.5f, 0.5f, 0.5f},
+    //                                                        CUSTOM_ConstantTextureCreate(
+    //                                                            (float[3]){0.5f, 0.5f, 0.5f})),
+    //                                true));
+    BLI_addtail(&pd->world,
+                CUSTOM_RectXYCreate(
+                    -3.0f,
+                    3.0f,
+                    -3.0f,
+                    3.0f,
+                    -0.5f,
+                    CUSTOM_LambertianCreate((float[3]){0.8f, 0.3f, 0.3f},
+                                            CUSTOM_ImageTextureCreate(custom_noise, 64, 64)),
+                    false));
     BLI_addtail(&pd->world,
                 CUSTOM_RectXYCreate(-1.0f,
                                     1.0f,
                                     -1.0f,
                                     1.0f,
-                                    2.0f,
+                                    3.0f,
                                     CUSTOM_DiffuseLightCreate(CUSTOM_ConstantTextureCreate(
-                                        (float[3]){4.0f, 4.0f, 4.0f}))));
+                                        (float[3]){4.0f, 4.0f, 4.0f})), true));
 
     BLI_addtail(&pd->world,
                 CUSTOM_SphereCreate((float[3]){ob->loc[0] + 1.0f, ob->loc[1], ob->loc[2]},
@@ -2245,14 +2292,15 @@ static void custom_draw_scene(void *vedata)
 
   CUSTOM_ViewLayerData *vldata = CUSTOM_view_layer_data_ensure();
 
-  const float *size = DRW_viewport_size_get();
-  CUSTOM_Vector *frame = NULL;
-  int wdt = (int)size[0]/2;
-  int hgt = (int)size[1]/2;
-  CUSTOM_ImageCreate(&frame, wdt, hgt);
-
   const DRWContextState *draw_ctx = DRW_context_state_get();
   const Scene *scene = draw_ctx->scene;
+
+  const float *size = DRW_viewport_size_get();
+  const float precentage = (float)scene->r.size / 100.0f;
+  CUSTOM_Vector *frame = NULL;
+  int wdt = (int)size[0] * precentage;
+  int hgt = (int)size[1] * precentage;
+  CUSTOM_ImageCreate(&frame, wdt, hgt);
 
   if (pd->world.first != NULL) {
     int nx = (float)wdt / (float)hgt < pd->camera->aspect ? wdt :

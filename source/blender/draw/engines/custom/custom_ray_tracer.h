@@ -87,7 +87,14 @@ typedef struct CUSTOM_DiffuseLight {
 } CUSTOM_DiffuseLight;
 
 /*Hittable type*/
-enum { CUSTOM_SPHERE = 0, CUSTOM_RECT_XY, CUSTOM_HITTABLE_MAX };
+enum {
+  CUSTOM_SPHERE = 0,
+  CUSTOM_RECT_XY,
+  CUSTOM_RECT_XZ,
+  CUSTOM_RECT_YZ,
+  CUSTOM_BOX,
+  CUSTOM_HITTABLE_MAX
+};
 
 typedef struct CUSTOM_Hittable {
   struct CUSTOM_Hittable *next, *prev;
@@ -107,8 +114,36 @@ typedef struct CUSTOM_RectXY {
   short type;
 
   CUSTOM_Material *mat_ptr;
+  CUSTOM_Vector normal;
   float x0, x1, y0, y1, k;
 } CUSTOM_RectXY;
+typedef struct CUSTOM_RectXZ {
+  struct CUSTOM_Hittable *next, *prev;
+  short type;
+
+  CUSTOM_Material *mat_ptr;
+  CUSTOM_Vector normal;
+  float x0, x1, z0, z1, k;
+} CUSTOM_RectXZ;
+typedef struct CUSTOM_RectYZ {
+  struct CUSTOM_Hittable *next, *prev;
+  short type;
+
+  CUSTOM_Material *mat_ptr;
+  CUSTOM_Vector normal;
+  float y0, y1, z0, z1, k;
+} CUSTOM_RectYZ;
+typedef struct CUSTOM_Box {
+  struct CUSTOM_Hittable *next, *prev;
+  short type;
+
+  CUSTOM_Vector pos_min, pos_max;
+  //CUSTOM_RectXY *up, *down;
+  //CUSTOM_RectXZ *right, *left;
+  //CUSTOM_RectYZ *front, *back;
+  ListBase faces;
+
+} CUSTOM_Box;
 
 typedef struct CUSTOM_HitRecord {
   float t;
@@ -147,12 +182,34 @@ CUSTOM_Ray CUSTOM_CameraGetRay(const CUSTOM_Camera *cam, float s, float t);
 
 CUSTOM_Sphere *CUSTOM_SphereCreate(const float center[3], float r, CUSTOM_Material *material);
 CUSTOM_RectXY *CUSTOM_RectXYCreate(
-    float x0, float x1, float y0, float y1, float k, const CUSTOM_Material *mat);
+    float x0, float x1, float y0, float y1, float k, const CUSTOM_Material *mat, bool flip_normal);
+CUSTOM_RectXZ *CUSTOM_RectXZCreate(
+    float x0, float x1, float z0, float z1, float k, const CUSTOM_Material *mat, bool flip_normal);
+CUSTOM_RectYZ *CUSTOM_RectYZCreate(
+    float y0, float y1, float z0, float z1, float k, const CUSTOM_Material *mat, bool flip_normal);
+CUSTOM_Box *CUSTOM_BoxCreate(const float p_min[3],
+                             const float p_max[3],
+                             const CUSTOM_Material *mat);
 
 CUSTOM_Material *CUSTOM_LambertianCreate(const float albedo[3], const CUSTOM_Texture *texture);
 CUSTOM_Material *CUSTOM_MetalCreate(const float albedo[3], const float f);
 CUSTOM_Material *CUSTOM_DielectricCreate(const float ri);
 CUSTOM_Material *CUSTOM_DiffuseLightCreate(const CUSTOM_Texture *texture);
+
+bool CUSTOM_Sphere_hit(CUSTOM_HitRecord *rec,
+                       const CUSTOM_Ray *ray,
+                       const CUSTOM_Sphere *sphere,
+                       float t_min,
+                       float t_max);
+bool CUSTOM_RectXY_hit(
+    CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_RectXY *rect, float t0, float t1);
+bool CUSTOM_RectXZ_hit(
+    CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_RectXZ *rect, float t0, float t1);
+bool CUSTOM_RectYZ_hit(
+    CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_RectYZ *rect, float t0, float t1);
+bool CUSTOM_Box_hit(
+    CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_Box *box, float t0, float t1);
+
 
 void CUSTOM_ImageCreate(CUSTOM_Vector **image, const int wdt, const int hgt);
 

@@ -70,11 +70,154 @@ CUSTOM_Vector pointAtParameter(const CUSTOM_Ray *ray, float t)
  *  rec:    pointer of CUSTOM_HitRecord*
  */
 
-bool Sphere_hit(CUSTOM_HitRecord *rec,
-                const CUSTOM_Ray *ray,
-                const CUSTOM_Sphere *sphere,
-                float t_min,
-                float t_max)
+bool Hittable_hit(CUSTOM_HitRecord *rec,
+                  const CUSTOM_Ray *ray,
+                  const CUSTOM_Hittable *hittable,
+                  float t0,
+                  float t1)
+{
+  if (hittable->type == CUSTOM_SPHERE) {
+    if (CUSTOM_Sphere_hit(rec, ray, (CUSTOM_Sphere *)hittable, t0, t1)) {
+      return true;
+    }
+  }
+  else if (hittable->type == CUSTOM_RECT_XY) {
+    if (CUSTOM_RectXY_hit(rec, ray, (CUSTOM_RectXY *)hittable, t0, t1)) {
+      return true;
+    }
+  }
+  else if (hittable->type == CUSTOM_RECT_XZ) {
+    if (CUSTOM_RectXZ_hit(rec, ray, (CUSTOM_RectXZ *)hittable, t0, t1)) {
+      return true;
+    }
+  }
+  else if (hittable->type == CUSTOM_RECT_YZ) {
+    if (CUSTOM_RectYZ_hit(rec, ray, (CUSTOM_RectYZ *)hittable, t0, t1)) {
+      return true;
+    }
+  }
+  else if (hittable->type == CUSTOM_BOX) {
+    if (CUSTOM_Box_hit(rec, ray, (CUSTOM_Box *)hittable, t0, t1)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/******************************************************************
+ * Generate ramdom vector, whose length < 1.0f
+ * Output:
+ *  p:  CUSTOM_Vector vec3
+ */
+CUSTOM_Vector randomInUnitSphere(void)
+{
+  CUSTOM_Vector p;
+  do {
+    // p = 2.0 * vec3(random_float(), random_float(), random_float()) - vec3(1, 1, 1);
+    mul_v3_v3fl(p.vec3, (float[3]){randomFloat(), randomFloat(), randomFloat()}, 2.0f);
+    sub_v3_v3(p.vec3, (float[3]){1.0f, 1.0f, 1.0f});
+  } while (len_squared_v3(p.vec3) >= 1.0);
+  return p;
+}
+
+/**/
+CUSTOM_Vector randomInUnitHemisphere(const CUSTOM_Vector *dir)
+{
+  CUSTOM_Vector p;
+  do {
+    // p = 2.0 * vec3(random_float(), random_float(), random_float()) - vec3(1, 1, 1);
+    mul_v3_v3fl(p.vec3, (float[3]){randomFloat(), randomFloat(), randomFloat()}, 2.0f);
+    sub_v3_v3(p.vec3, (float[3]){1.0f, 1.0f, 1.0f});
+  } while (dot_v3v3(p.vec3, dir->vec3) < 0.0f);
+  return p;
+}
+
+CUSTOM_Vector randomInUnitDisk(void)
+{
+  CUSTOM_Vector p;
+  do {
+    // p = 2.0 * vec3(random_double(), random_double(), 0) - vec3(1, 1, 0);
+    mul_v3_v3fl(p.vec3, (float[3]){randomFloat(), randomFloat(), 0.0f}, 2.0f);
+    sub_v3_v3(p.vec3, (float[3]){1.0f, 1.0f, 0.0f});
+  } while (dot_v3v3(p.vec3, p.vec3) >= 1.0);
+  return p;
+}
+
+/******************************************************************
+ * check hit by a ray through whole world
+ * Output:
+ *  hit_anything:  bool
+ * Input:
+ *  ray:    pointer of const CUSTOM_Ray*
+ *  world:  pointer of const ListBase*
+ *  t_min:  float, min of t parameter of ray
+ *  t_max:  float, max of t parameter of ray
+ *  rec:    pointer of CUSTOM_HitRecord*
+ */
+bool list_hit(
+    CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const ListBase *list, float t_min, float t_max)
+{
+  CUSTOM_HitRecord temp_rec;
+  bool hit_anything = false;
+  double closest_so_far = t_max;
+  for (CUSTOM_Hittable *hittable = (CUSTOM_Hittable *)list->first; hittable;
+       hittable = hittable->next) {
+    if (Hittable_hit(&temp_rec, ray, hittable, t_min, closest_so_far)) {
+      hit_anything = true;
+      closest_so_far = temp_rec.t;
+      *rec = temp_rec;
+    }
+  }
+  return hit_anything;
+}
+CUSTOM_Vector textureValue(const CUSTOM_Texture *texture,
+                           float u,
+                           float v,
+                           const CUSTOM_Vector *pos)
+{
+  if (texture->type == CUSTOM_CONSTANT_TEXTURE)
+    return CUSTOM_ConstantTextureValue((CUSTOM_ConstantTexture *)texture);
+  else if (texture->type == CUSTOM_CHECKER_TEXTURE)
+    return CUSTOM_CheckerTextureValue((CUSTOM_CheckerTexture *)texture, u, v, pos);
+  else if (texture->type == CUSTOM_IMAGE_TEXTURE)
+    return CUSTOM_ImageTextureValue((CUSTOM_ImageTexture *)texture, u, v, pos);
+  else
+    return (CUSTOM_Vector){0.0f, 0.0f, 0.0f};
+}
+
+bool materialScatter(CUSTOM_Ray *scattered,
+                     CUSTOM_Vector *attenuation,
+                     const CUSTOM_Ray *ray_in,
+                     const CUSTOM_HitRecord *rec,
+                     const CUSTOM_Material *mat)
+{
+  if (rec->mat_ptr->type == CUSTOM_LAMBERTIAN)
+    return CUSTOM_LambertianScatter(
+        scattered, attenuation, rec, (CUSTOM_Lambertian *)rec->mat_ptr);
+  else if (rec->mat_ptr->type == CUSTOM_METAL)
+    return CUSTOM_MetalScatter(scattered, attenuation, ray_in, rec, (CUSTOM_Metal *)rec->mat_ptr);
+  else if (rec->mat_ptr->type == CUSTOM_DIELECTRIC)
+    return CUSTOM_DielectricScatter(
+        scattered, attenuation, ray_in, rec, (CUSTOM_Dielectric *)rec->mat_ptr);
+  else if (rec->mat_ptr->type == CUSTOM_DIFFUSE_LIGHT)
+    return CUSTOM_DiffuseLightScatter((CUSTOM_DiffuseLight *)rec->mat_ptr);
+  else
+    return false;  // error
+}
+CUSTOM_Vector materialEmitted(float u, float v, const CUSTOM_Vector *p, const CUSTOM_Material *mat)
+{
+  if (mat->type < CUSTOM_MATERIAL_MAX)
+    return (CUSTOM_Vector){0.0f, 0.0f, 0.0f};
+  else if (mat->type == CUSTOM_DIFFUSE_LIGHT)
+    return CUSTOM_DiffuseLightEmitted(u, v, p, (CUSTOM_DiffuseLight *)mat);
+}
+
+bool CUSTOM_Sphere_hit(CUSTOM_HitRecord *rec,
+                       const CUSTOM_Ray *ray,
+                       const CUSTOM_Sphere *sphere,
+                       float t_min,
+                       float t_max)
 {
   float co[3];  // sphere's center to ray's origin
   sub_v3_v3v3(co, ray->origin.vec3, sphere->center.vec3);
@@ -111,7 +254,7 @@ bool Sphere_hit(CUSTOM_HitRecord *rec,
   }
   return false;
 }
-bool RectXY_hit(
+bool CUSTOM_RectXY_hit(
     CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_RectXY *rect, float t0, float t1)
 {
   float t = (rect->k - ray->origin.z) / ray->direction.z;
@@ -126,138 +269,54 @@ bool RectXY_hit(
   rec->t = t;
   rec->mat_ptr = rect->mat_ptr;
   rec->position = pointAtParameter(ray, rec->t);
-  rec->normal = (CUSTOM_Vector){0.0f, 0.0f, -1.0f};
+  rec->normal = rect->normal;
+  return true;
+}
+bool CUSTOM_RectXZ_hit(
+    CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_RectXZ *rect, float t0, float t1)
+{
+  float t = (rect->k - ray->origin.y) / ray->direction.y;
+  if (t < t0 || t > t1)
+    return false;
+  float x = ray->origin.x + t * ray->direction.x;
+  float z = ray->origin.z + t * ray->direction.z;
+  if (x < rect->x0 || x > rect->x1 || z < rect->z0 || z > rect->z1)
+    return false;
+  rec->u = (x - rect->x0) / (rect->x1 - rect->x0);
+  rec->v = (z - rect->z0) / (rect->z1 - rect->z0);
+  rec->t = t;
+  rec->mat_ptr = rect->mat_ptr;
+  rec->position = pointAtParameter(ray, rec->t);
+  rec->normal = rect->normal;
+  return true;
+}
+bool CUSTOM_RectYZ_hit(
+    CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_RectYZ *rect, float t0, float t1)
+{
+  float t = (rect->k - ray->origin.x) / ray->direction.x;
+  if (t < t0 || t > t1)
+    return false;
+  float y = ray->origin.y + t * ray->direction.y;
+  float z = ray->origin.z + t * ray->direction.z;
+  if (y < rect->y0 || y > rect->y1 || z < rect->z0 || z > rect->z1)
+    return false;
+  rec->u = (y - rect->y0) / (rect->y1 - rect->y0);
+  rec->v = (z - rect->z0) / (rect->z1 - rect->z0);
+  rec->t = t;
+  rec->mat_ptr = rect->mat_ptr;
+  rec->position = pointAtParameter(ray, rec->t);
+  rec->normal = rect->normal;
   return true;
 }
 
-bool Hittable_hit(CUSTOM_HitRecord *rec,
-                  const CUSTOM_Ray *ray,
-                  const CUSTOM_Hittable *hittable,
-                  float t0,
-                  float t1)
+bool CUSTOM_Box_hit(
+    CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_Box *box, float t0, float t1)
 {
-  if (hittable->type == CUSTOM_SPHERE) {
-    // CUSTOM_Sphere *sphere = (CUSTOM_Sphere *)hittable;
-    if (Sphere_hit(rec, ray, (CUSTOM_Sphere *)hittable, t0, t1)) {
-      return true;
-    }
-  }
-  else if (hittable->type == CUSTOM_RECT_XY) {
-    if (RectXY_hit(rec, ray, (CUSTOM_RectXY *)hittable, t0, t1)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-/******************************************************************
- * Generate ramdom vector, whose length < 1.0f
- * Output:
- *  p:  CUSTOM_Vector vec3
- */
-CUSTOM_Vector randomInUnitSphere(void)
-{
-  CUSTOM_Vector p;
-  do {
-    // p = 2.0 * vec3(random_float(), random_float(), random_float()) - vec3(1, 1, 1);
-    mul_v3_v3fl(p.vec3, (float[3]){randomFloat(), randomFloat(), randomFloat()}, 2.0f);
-    sub_v3_v3(p.vec3, (float[3]){1.0f, 1.0f, 1.0f});
-  } while (len_squared_v3(p.vec3) >= 1.0);
-  return p;
-}
-
-CUSTOM_Vector randomInUnitDisk(void)
-{
-  CUSTOM_Vector p;
-  do {
-    // p = 2.0 * vec3(random_double(), random_double(), 0) - vec3(1, 1, 0);
-    mul_v3_v3fl(p.vec3, (float[3]){randomFloat(), randomFloat(), 0.0f}, 2.0f);
-    sub_v3_v3(p.vec3, (float[3]){1.0f, 1.0f, 0.0f});
-  } while (dot_v3v3(p.vec3, p.vec3) >= 1.0);
-  return p;
-}
-
-/******************************************************************
- * check hit by a ray through whole world
- * Output:
- *  hit_anything:  bool
- * Input:
- *  ray:    pointer of const CUSTOM_Ray*
- *  world:  pointer of const ListBase*
- *  t_min:  float, min of t parameter of ray
- *  t_max:  float, max of t parameter of ray
- *  rec:    pointer of CUSTOM_HitRecord*
- */
-bool world_hit(
-    const CUSTOM_Ray *ray, const ListBase *world, float t_min, float t_max, CUSTOM_HitRecord *rec)
-{
-  CUSTOM_HitRecord temp_rec;
-  bool hit_anything = false;
-  double closest_so_far = t_max;
-  for (CUSTOM_Hittable *hittable = (CUSTOM_Hittable *)world->first; hittable;
-       hittable = hittable->next) {
-    // if (hittable->type == CUSTOM_SPHERE) {
-    //  // CUSTOM_Sphere *sphere = (CUSTOM_Sphere *)hittable;
-    //  if (Sphere_hit(&temp_rec, ray, (CUSTOM_Sphere *)hittable, t_min, closest_so_far)) {
-    //    hit_anything = true;
-    //    closest_so_far = temp_rec.t;
-    //    *rec = temp_rec;
-    //  }
-    //}
-    // else if (hittable->type == CUSTOM_RECT_XY) {
-    //  if (RectXY_hit(&temp_rec, ray, (CUSTOM_RectXY *)hittable, t_min, closest_so_far)) {
-    //  }
-    //}
-    if (Hittable_hit(&temp_rec, ray, hittable, t_min, closest_so_far)) {
-      hit_anything = true;
-      closest_so_far = temp_rec.t;
-      *rec = temp_rec;
-    }
-  }
-  return hit_anything;
-}
-CUSTOM_Vector textureValue(const CUSTOM_Texture *texture,
-                           float u,
-                           float v,
-                           const CUSTOM_Vector *pos)
-{
-  if (texture->type == CUSTOM_CONSTANT_TEXTURE)
-    return CUSTOM_ConstantTextureValue((CUSTOM_ConstantTexture *)texture);
-  else if (texture->type == CUSTOM_CHECKER_TEXTURE)
-    return CUSTOM_CheckerTextureValue((CUSTOM_CheckerTexture *)texture, u, v, pos);
-  else if (texture->type == CUSTOM_IMAGE_TEXTURE)
-    return CUSTOM_ImageTextureValue((CUSTOM_ImageTexture *)texture, u, v, pos);
+  if (list_hit(rec, ray, &box->faces, t0, t1))
+    return true;
   else
-    return (CUSTOM_Vector){0.0f, 0.0f, 0.0f};
-}
-
-bool materialScatter(CUSTOM_Ray *scattered,
-                     CUSTOM_Vector *attenuation,
-                     const CUSTOM_Ray *ray_in,
-                     const CUSTOM_HitRecord *rec,
-                     const CUSTOM_Material *mat)
-{
-  if (rec->mat_ptr->type == CUSTOM_LAMBERTIAN)
-    return CUSTOM_LambertianScatter(
-        scattered, attenuation, rec, (CUSTOM_Lambertian *)rec->mat_ptr);
-  else if (rec->mat_ptr->type == CUSTOM_METAL)
-    return CUSTOM_MetalScatter(
-        scattered, attenuation, ray_in, rec, (CUSTOM_Metal *)rec->mat_ptr);
-  else if (rec->mat_ptr->type == CUSTOM_DIELECTRIC)
-    return CUSTOM_DielectricScatter(
-        scattered, attenuation, ray_in, rec, (CUSTOM_Dielectric *)rec->mat_ptr);
-  else if (rec->mat_ptr->type == CUSTOM_DIFFUSE_LIGHT)
-    return CUSTOM_DiffuseLightScatter((CUSTOM_DiffuseLight *)rec->mat_ptr);
-  else
-    return false;  // error
-}
-CUSTOM_Vector materialEmitted(float u, float v, const CUSTOM_Vector *p, const CUSTOM_Material *mat)
-{
-  if (mat->type < CUSTOM_MATERIAL_MAX)
-    return (CUSTOM_Vector){0.0f, 0.0f, 0.0f};
-  else if (mat->type == CUSTOM_DIFFUSE_LIGHT)
-    return CUSTOM_DiffuseLightEmitted(u, v, p, (CUSTOM_DiffuseLight *)mat);
+    return false;
+  // return list_hit(rec, ray, &box->faces, t0, t1);
 }
 
 /******************************************************************
@@ -272,7 +331,7 @@ CUSTOM_Vector materialEmitted(float u, float v, const CUSTOM_Vector *p, const CU
 CUSTOM_Vector CUSTOM_sampleColor(const CUSTOM_Ray *ray, const ListBase *world, int depth)
 {
   CUSTOM_HitRecord rec;
-  if (world_hit(ray, world, 0.0, FLT_MAX, &rec)) {
+  if (list_hit(&rec, ray, world, 0.01f, FLT_MAX)) {
     CUSTOM_Ray scattered;
     CUSTOM_Vector attenuation;
 
@@ -285,22 +344,24 @@ CUSTOM_Vector CUSTOM_sampleColor(const CUSTOM_Ray *ray, const ListBase *world, i
       add_v3_v3(color.vec3, emitted.vec3);
       return color;
     }
-    else
-      // return (CUSTOM_Vector){0.0f, 0.0f, 0.0f};
+    else {
       return emitted;
+    }
+    // return (CUSTOM_Vector){0.0f, 0.0f, 0.0f};
+
   }
   else {
-     //float unit_direction[3];
-     //normalize_v3_v3(unit_direction, ray->direction.vec3);
-     //float t = 0.5f * (unit_direction[2] + 1.0f);
+    //float unit_direction[3];
+    //normalize_v3_v3(unit_direction, ray->direction.vec3);
+    //float t = 0.5f * (unit_direction[2] + 1.0f);
 
-     //CUSTOM_Vector background;
-     ////return (1.0 - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
-     //mul_v3_v3fl(background.vec3, (float[3]){1.0f, 1.0f, 1.0f}, 1.0f - t);
-     //madd_v3_v3fl(background.vec3, (float[3]){0.5f, 0.7f, 1.0f}, t);
-     //return background;
+    //CUSTOM_Vector background;
+    //// return (1.0 - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
+    //mul_v3_v3fl(background.vec3, (float[3]){1.0f, 1.0f, 1.0f}, 1.0f - t);
+    //madd_v3_v3fl(background.vec3, (float[3]){0.5f, 0.7f, 1.0f}, t);
+    //return background;
 
-    return (CUSTOM_Vector){0.0f, 0.0f, 0.0f};
+     return (CUSTOM_Vector){0.0f, 0.0f, 0.0f};
   }
 }
 /******************************************************************
@@ -396,7 +457,6 @@ CUSTOM_Ray CUSTOM_CameraGetRay(const CUSTOM_Camera *cam, float s, float t)
  *  r             :float, radius of sphere
  *  material      :pointer of CUSTOM_Material, material of sphere
  */
-
 CUSTOM_Sphere *CUSTOM_SphereCreate(const float center[3], float r, CUSTOM_Material *material)
 {
   CUSTOM_Sphere *sphere = (CUSTOM_Sphere *)MEM_callocN(sizeof(CUSTOM_Sphere), "CUSTOM_Sphere");
@@ -411,8 +471,9 @@ CUSTOM_Sphere *CUSTOM_SphereCreate(const float center[3], float r, CUSTOM_Materi
 
   return sphere;
 }
+/**/
 CUSTOM_RectXY *CUSTOM_RectXYCreate(
-    float x0, float x1, float y0, float y1, float k, const CUSTOM_Material *mat)
+    float x0, float x1, float y0, float y1, float k, const CUSTOM_Material *mat, bool flip_normal)
 {
   CUSTOM_RectXY *rect = (CUSTOM_RectXY *)MEM_callocN(sizeof(CUSTOM_RectXY), "CUSTOM_RectXY");
   rect->type = CUSTOM_RECT_XY;
@@ -425,6 +486,83 @@ CUSTOM_RectXY *CUSTOM_RectXYCreate(
   rect->y1 = y1;
   rect->k = k;
   rect->mat_ptr = mat;
+  rect->normal = flip_normal ? (CUSTOM_Vector){0.0f, 0.0f, -1.0f} :
+                               (CUSTOM_Vector){0.0f, 0.0f, 1.0f};
+  return rect;
+}
+/**/
+CUSTOM_RectXZ *CUSTOM_RectXZCreate(
+    float x0, float x1, float z0, float z1, float k, const CUSTOM_Material *mat, bool flip_normal)
+{
+  CUSTOM_RectXZ *rect = (CUSTOM_RectXZ *)MEM_callocN(sizeof(CUSTOM_RectXZ), "CUSTOM_RectXZ");
+  rect->type = CUSTOM_RECT_XZ;
+  rect->prev = NULL;
+  rect->next = NULL;
+
+  rect->x0 = x0;
+  rect->x1 = x1;
+  rect->z0 = z0;
+  rect->z1 = z1;
+  rect->k = k;
+  rect->mat_ptr = mat;
+  rect->normal = flip_normal ? (CUSTOM_Vector){0.0f, -1.0f, 0.0f} :
+                               (CUSTOM_Vector){0.0f, 1.0f, 0.0f};
+  return rect;
+}
+/**/
+CUSTOM_RectYZ *CUSTOM_RectYZCreate(
+    float y0, float y1, float z0, float z1, float k, const CUSTOM_Material *mat, bool flip_normal)
+{
+  CUSTOM_RectYZ *rect = (CUSTOM_RectYZ *)MEM_callocN(sizeof(CUSTOM_RectYZ), "CUSTOM_RectYZ");
+  rect->type = CUSTOM_RECT_YZ;
+  rect->prev = NULL;
+  rect->next = NULL;
+
+  rect->y0 = y0;
+  rect->y1 = y1;
+  rect->z0 = z0;
+  rect->z1 = z1;
+  rect->k = k;
+  rect->mat_ptr = mat;
+  rect->normal = flip_normal ? (CUSTOM_Vector){-1.0f, 0.0f, 0.0f} :
+                               (CUSTOM_Vector){1.0f, 0.0f, 0.0f};
+  return rect;
+}
+
+CUSTOM_Box *CUSTOM_BoxCreate(const float p_min[3],
+                             const float p_max[3],
+                             const CUSTOM_Material *mat)
+{
+  CUSTOM_Box *box = (CUSTOM_Box *)MEM_callocN(sizeof(CUSTOM_Box), "CUSTOM_Box");
+  box->type = CUSTOM_BOX;
+  box->prev = NULL;
+  box->next = NULL;
+
+  box->pos_min = (CUSTOM_Vector){p_min[0], p_min[1], p_min[2]};
+  box->pos_max = (CUSTOM_Vector){p_max[0], p_max[1], p_max[2]};
+
+  CUSTOM_RectYZ *front = CUSTOM_RectYZCreate(
+      box->pos_min.y, box->pos_max.y, box->pos_min.z, box->pos_max.z, box->pos_max.x, mat, false);
+  CUSTOM_RectYZ *back = CUSTOM_RectYZCreate(
+      box->pos_min.y, box->pos_max.y, box->pos_min.z, box->pos_max.z, box->pos_min.x, mat, true);
+  CUSTOM_RectXY *up = CUSTOM_RectXYCreate(
+      box->pos_min.x, box->pos_max.x, box->pos_min.y, box->pos_max.y, box->pos_max.z, mat, false);
+  CUSTOM_RectXY *down = CUSTOM_RectXYCreate(
+      box->pos_min.x, box->pos_max.x, box->pos_min.y, box->pos_max.y, box->pos_min.z, mat, true);
+  CUSTOM_RectXZ *right = CUSTOM_RectXZCreate(
+      box->pos_min.x, box->pos_max.x, box->pos_min.z, box->pos_max.z, box->pos_max.y, mat, false);
+  CUSTOM_RectXZ *left = CUSTOM_RectXZCreate(
+      box->pos_min.x, box->pos_max.x, box->pos_min.z, box->pos_max.z, box->pos_min.y, mat, true);
+
+  box->faces.first = box->faces.last = NULL;
+  BLI_addtail(&box->faces, front);
+  BLI_addtail(&box->faces, back);
+  BLI_addtail(&box->faces, up);
+  BLI_addtail(&box->faces, down);
+  BLI_addtail(&box->faces, right);
+  BLI_addtail(&box->faces, left);
+
+  return box;
 }
 
 /******************************************************************
@@ -494,10 +632,10 @@ CUSTOM_Material *CUSTOM_DielectricCreate(const float ri)
   return (CUSTOM_Material *)diele;
 }
 
-CUSTOM_Material *CUSTOM_DiffuseLightCreate(const CUSTOM_Texture* texture)
+CUSTOM_Material *CUSTOM_DiffuseLightCreate(const CUSTOM_Texture *texture)
 {
   CUSTOM_DiffuseLight *light = (CUSTOM_DiffuseLight *)MEM_callocN(sizeof(CUSTOM_DiffuseLight),
-                                                              "CUSTOM_DiffuseLight");
+                                                                  "CUSTOM_DiffuseLight");
   light->type = CUSTOM_DIFFUSE_LIGHT;
   light->emit = texture;
   return (CUSTOM_Material *)light;
@@ -518,10 +656,12 @@ bool CUSTOM_LambertianScatter(CUSTOM_Ray *scattered,
                               const CUSTOM_HitRecord *rec,
                               const CUSTOM_Lambertian *lamb)
 {
-  float target[3];
-  CUSTOM_Vector random = randomInUnitSphere();
-  add_v3_v3v3(target, rec->position.vec3, rec->normal.vec3);
-  add_v3_v3(target, random.vec3);
+  float target[3]; 
+   CUSTOM_Vector random = randomInUnitSphere();
+   add_v3_v3v3(target, rec->position.vec3, rec->normal.vec3);
+   add_v3_v3(target, random.vec3);
+  //CUSTOM_Vector random = randomInUnitHemisphere(&rec->normal);
+  //add_v3_v3v3(target, rec->position.vec3, random.vec3);
 
   copy_v3_v3(scattered->origin.vec3, rec->position.vec3);
   sub_v3_v3v3(scattered->direction.vec3, target, rec->position.vec3);
