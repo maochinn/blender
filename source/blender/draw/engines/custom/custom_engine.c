@@ -5,6 +5,8 @@
 #include "BKE_object.h"
 #include "BKE_global.h" /* for G.debug_value */
 #include "BKE_camera.h"
+#include "BKE_mesh.h"
+#include "BKE_node.h"
 
 #include "DEG_depsgraph_query.h"
 
@@ -17,6 +19,7 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_camera_types.h"
+#include "DNA_node_types.h"
 
 #include "custom_ray_tracer.h"
 ///
@@ -2130,115 +2133,106 @@ static void custom_cache_populate(void *vedata, Object *ob)
 {
   CUSTOM_Data *data = vedata;
   CUSTOM_PrivateData *pd = data->stl->pd;
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  const Scene *scene = draw_ctx->scene;
+  float unit_scale = scene->unit.scale_length;
+
+  float loc[3] = {ob->loc[0] * unit_scale, ob->loc[1] * unit_scale, ob->loc[2] * unit_scale};
 
   if (ob->type == OB_MESH) {
-    //BLI_addtail(&pd->world,
-    //            CUSTOM_SphereCreate(
-    //                ob->loc,
-    //                0.5f,
-    //                CUSTOM_LambertianCreate((float[3]){0.8f, 0.3f, 0.3f},
-    //                                        CUSTOM_ImageTextureCreate(custom_noise, 64, 64))));
-    BLI_addtail(&pd->world,
-                CUSTOM_BoxCreate((float[3]){-0.5f, -0.5f, -0.5f},
-                                 (float[3]){0.5f, 0.5f, 0.5f},
-                                 CUSTOM_LambertianCreate((float[3]){0.73f, 0.0f, 0.0f},
-                                                         CUSTOM_ConstantTextureCreate(
-                                                             (float[3]){0.73f, 0.73f, 0.73f}))));
+    const Mesh *mesh = ob->data;
 
-    //BLI_addtail(
-    //    &pd->world,
-    //    CUSTOM_SphereCreate((float[3]){ob->loc[0], ob->loc[1], ob->loc[2] - 100.5f},
-    //                        100.0f,
-    //                        CUSTOM_LambertianCreate(
-    //                            (float[3]){0.8f, 0.8f, 0.0f},
-    //                            CUSTOM_CheckerTextureCreate(
-    //                                CUSTOM_ConstantTextureCreate((float[3]){0.2f, 0.3f, 0.1f}),
-    //                                CUSTOM_ConstantTextureCreate((float[3]){0.9f, 0.9f, 0.9f})))));
-    // BLI_addtail(&pd->world,
-    //            CUSTOM_SphereCreate(
-    //                (float[3]){ob->loc[0], ob->loc[1], ob->loc[2] - 100.5f},
-    //                100.0f,
-    //                CUSTOM_LambertianCreate((float[3]){0.8f, 0.8f, 0.0f},
-    //                                        CUSTOM_ImageTextureCreate(custom_noise, 64, 64))));
+    const CUSTOM_Material *material = CUSTOM_LambertianCreate(
+        (float[3]){0.5f, 0.5f, 0.5f}, CUSTOM_ConstantTextureCreate((float[3]){0.5f, 0.5f, 0.5f}));
 
-    //BLI_addtail(&pd->world,
-    //        CUSTOM_RectYZCreate(-3.0f,
-    //                            3.0f,
-    //                            -3.0f,
-    //                            3.0f,
-    //                            -3.0f,
-    //                            CUSTOM_LambertianCreate((float[3]){0.5f, 0.5f, 0.3f},
-    //                                                    CUSTOM_ConstantTextureCreate(
-    //                                                        (float[3]){0.5f, 0.5f, 0.5f})),
-    //                            false));
-    //BLI_addtail(&pd->world,
-    //            CUSTOM_RectXZCreate(-3.0f,
-    //                                3.0f,
-    //                                -3.0f,
-    //                                3.0f,
-    //                                -3.0f,
-    //                                CUSTOM_LambertianCreate((float[3]){0.5f, 0.5f, 0.5f},
-    //                                                        CUSTOM_ConstantTextureCreate(
-    //                                                            (float[3]){0.5f, 0.5f, 0.5f})),
-    //                                false));
-    //BLI_addtail(&pd->world,
-    //            CUSTOM_RectXZCreate(-3.0f,
-    //                                3.0f,
-    //                                -3.0f,
-    //                                3.0f,
-    //                                3.0f,
-    //                                CUSTOM_LambertianCreate((float[3]){0.5f, 0.5f, 0.5f},
-    //                                                        CUSTOM_ConstantTextureCreate(
-    //                                                            (float[3]){0.5f, 0.5f, 0.5f})),
-    //                                true));
-    BLI_addtail(&pd->world,
-                CUSTOM_RectXYCreate(
-                    -3.0f,
-                    3.0f,
-                    -3.0f,
-                    3.0f,
-                    -0.5f,
-                    CUSTOM_LambertianCreate((float[3]){0.8f, 0.3f, 0.3f},
-                                            CUSTOM_ImageTextureCreate(custom_noise, 64, 64)),
-                    false));
-    BLI_addtail(&pd->world,
-                CUSTOM_RectXYCreate(-1.0f,
-                                    1.0f,
-                                    -1.0f,
-                                    1.0f,
-                                    3.0f,
-                                    CUSTOM_DiffuseLightCreate(CUSTOM_ConstantTextureCreate(
-                                        (float[3]){4.0f, 4.0f, 4.0f})), true));
+    if (mesh->mat[0])
+    {
+      const ListBase nodes = mesh->mat[0]->nodetree->nodes;
+      for (const bNode *node = nodes.first; node; node = node->next) {
+        if (node->type == SH_NODE_BSDF_DIFFUSE) {
+          for (const bNodeSocket *iosock = node->inputs.first; iosock; iosock = iosock->next) {
+            if (strncmp("Color", iosock->name, 5) == 0 && iosock->type == SOCK_RGBA) {
+              const float *color = (float *)iosock->default_value;
+              material = CUSTOM_LambertianCreate(
+                  (float[3]){0.5f, 0.5f, 0.5f},
+                  CUSTOM_ConstantTextureCreate((float[3]){color[0], color[1], color[2]}));
+              break;
+            }
+          }
+          break;
+        }
+      }
+    }
+    if (strncmp("OBSphere", ob->id.name, 8) == 0) {
+      BLI_addtail(
+          &pd->world,
+          CUSTOM_SphereCreate((float[3]){loc[0], loc[1], loc[2]}, 0.5f * ob->scale[0], material));
+    }
+    else if (strncmp("OBCube", ob->id.name, 6) == 0) {
+      float min[3], max[3];
+      madd_v3_v3v3v3(min, loc, (float[3]){-0.5f, -0.5f, -0.5f}, ob->scale);
+      madd_v3_v3v3v3(max, loc, (float[3]){0.5f, 0.5f, 0.5f}, ob->scale);
+      BLI_addtail(&pd->world, CUSTOM_BoxCreate(min, max, material));
+    }
+    else if (strncmp("OBPlane", ob->id.name, 7) == 0) {
+      float dimension[3];
+      BKE_object_dimensions_get(ob, dimension);
+      const MPoly *mpoly = mesh->mpoly;
+      float normal[3];
 
-    BLI_addtail(&pd->world,
-                CUSTOM_SphereCreate((float[3]){ob->loc[0] + 1.0f, ob->loc[1], ob->loc[2]},
-                                    0.5f,
-                                    CUSTOM_MetalCreate((float[3]){0.8f, 0.6f, 0.2f}, 0.3f)));
-    BLI_addtail(&pd->world,
-                CUSTOM_SphereCreate((float[3]){ob->loc[0] - 1.0f, ob->loc[1], ob->loc[2]},
-                                    0.5f,
-                                    CUSTOM_DielectricCreate(1.5f)));
-    BLI_addtail(&pd->world,
-                CUSTOM_SphereCreate((float[3]){ob->loc[0] - 1.0f, ob->loc[1], ob->loc[2]},
-                                    -0.45f,
-                                    CUSTOM_DielectricCreate(1.5f)));
-    BLI_addtail(&pd->world,
-                CUSTOM_SphereCreate((float[3]){ob->loc[0], ob->loc[1] + 1.0f, ob->loc[2]},
-                                    0.5f,
-                                    CUSTOM_MetalCreate((float[3]){0.8f, 0.8f, 0.8f}, 1.0f)));
-    BLI_addtail(&pd->world,
-                CUSTOM_SphereCreate((float[3]){ob->loc[0], ob->loc[1] - 1.0f, ob->loc[2]},
-                                    0.5f,
-                                    CUSTOM_DielectricCreate(1.5f)));
+      BKE_mesh_calc_poly_normal(mpoly, mesh->mloop + mpoly->loopstart, mesh->mvert, normal);
+      if (dimension[0] <= 0.001f)
+        BLI_addtail(&pd->world,
+                    CUSTOM_RectYZCreate(loc[1] - 0.5f * ob->scale[1],
+                                        loc[1] + 0.5f * ob->scale[1],
+                                        loc[2] - 0.5f * ob->scale[2],
+                                        loc[2] + 0.5f * ob->scale[2],
+                                        loc[0],
+                                        material,
+                                        normal[0] < 0.0f ? true : false));
+      else if (dimension[1] <= 0.001f)
+        BLI_addtail(&pd->world,
+                    CUSTOM_RectXZCreate(loc[0] - 0.5f * ob->scale[0],
+                                        loc[0] + 0.5f * ob->scale[0],
+                                        loc[2] - 0.5f * ob->scale[2],
+                                        loc[2] + 0.5f * ob->scale[2],
+                                        loc[1],
+                                        material,
+                                        normal[1] < 0.0f ? true : false));
+      else if (dimension[2] <= 0.001f)
+        BLI_addtail(&pd->world,
+                    CUSTOM_RectXYCreate(loc[0] - 0.5f * ob->scale[0],
+                                        loc[0] + 0.5f * ob->scale[0],
+                                        loc[1] - 0.5f * ob->scale[1],
+                                        loc[1] + 0.5f * ob->scale[1],
+                                        loc[2],
+                                        material,
+                                        normal[2] < 0.0f ? true : false));
+    }
+  }
+  else if (ob->type == OB_LAMP) {
+    const Light *light = ob->data;
+    if (light->type == LA_AREA) {
+      const CUSTOM_Material *material = CUSTOM_DiffuseLightCreate(
+          CUSTOM_ConstantTextureCreate((float[3]){4.0f, 4.0f, 4.0f}));
+      BLI_addtail(&pd->world,
+                  CUSTOM_RectXYCreate(loc[0] - 0.5f * ob->scale[0],
+                                      loc[0] + 0.5f * ob->scale[0],
+                                      loc[1] - 0.5f * ob->scale[1],
+                                      loc[1] + 0.5f * ob->scale[1],
+                                      loc[2],
+                                      material,
+                                      true));
+    }
   }
   else if (ob->type == OB_CAMERA) {
-    Camera *cam = ob->data;
+    const Camera *cam = ob->data;
     const float *size = DRW_viewport_size_get();
-    CameraParams params;
+    // CameraParams params;
     float sensor = BKE_camera_sensor_size(cam->sensor_fit, cam->sensor_x, cam->sensor_y);
 
     float look_at[3];
-    sub_v3_v3v3(look_at, ob->loc, ob->obmat[2]);
+    sub_v3_v3v3(look_at, loc, ob->obmat[2]);
 
     const DRWContextState *draw_ctx = DRW_context_state_get();
     const Scene *scene = draw_ctx->scene;
@@ -2250,14 +2244,14 @@ static void custom_cache_populate(void *vedata, Object *ob)
     // float aspect = size[0] / size[1];
 
     if (cam->dof.flag) {
-      //use depth of field
+      // use depth of field
       float focus_distance;
       if (cam->dof.focus_object)
-        focus_distance = len_v3v3(ob->loc, cam->dof.focus_object->loc);
+        focus_distance = len_v3v3(loc, cam->dof.focus_object->loc);
       else
         focus_distance = cam->dof.focus_distance;
 
-      pd->camera = CUSTOM_CameraCreate(ob->loc,
+      pd->camera = CUSTOM_CameraCreate(loc,
                                        look_at,
                                        (float[3]){0.0f, 0.0f, 1.0f},
                                        focallength_to_fov(cam->lens, sensor),
@@ -2265,9 +2259,8 @@ static void custom_cache_populate(void *vedata, Object *ob)
                                        cam->dof.aperture_fstop,
                                        focus_distance);
     }
-    else
-    {
-      pd->camera = CUSTOM_CameraCreate(ob->loc,
+    else {
+      pd->camera = CUSTOM_CameraCreate(loc,
                                        look_at,
                                        (float[3]){0.0f, 0.0f, 1.0f},
                                        focallength_to_fov(cam->lens, sensor),
@@ -2275,7 +2268,6 @@ static void custom_cache_populate(void *vedata, Object *ob)
                                        0.0f,
                                        1.0f);
     }
-   
   }
 }
 
@@ -2338,8 +2330,7 @@ static void custom_draw_scene(void *vedata)
 
   // free
   BLI_freelistN(&pd->world);
-  pd->world.first = NULL;
-  pd->world.last = NULL;
+  pd->world.first = pd->world.last = NULL;
 }
 static void custom_view_update(void *vedata)
 {

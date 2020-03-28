@@ -332,10 +332,12 @@ CUSTOM_Vector CUSTOM_sampleColor(const CUSTOM_Ray *ray, const ListBase *world, i
 {
   CUSTOM_HitRecord rec;
   if (list_hit(&rec, ray, world, 0.01f, FLT_MAX)) {
+    //return (CUSTOM_Vector){1.0f, 0.0f, 0.0f};
     CUSTOM_Ray scattered;
     CUSTOM_Vector attenuation;
 
     CUSTOM_Vector emitted = materialEmitted(rec.u, rec.v, &rec.position, rec.mat_ptr);
+    
 
     if (depth < CUSTOM_RECURSIVE_MAX &&
         materialScatter(&scattered, &attenuation, ray, &rec, rec.mat_ptr)) {
@@ -347,7 +349,7 @@ CUSTOM_Vector CUSTOM_sampleColor(const CUSTOM_Ray *ray, const ListBase *world, i
     else {
       return emitted;
     }
-    // return (CUSTOM_Vector){0.0f, 0.0f, 0.0f};
+
 
   }
   else {
@@ -361,7 +363,7 @@ CUSTOM_Vector CUSTOM_sampleColor(const CUSTOM_Ray *ray, const ListBase *world, i
     //madd_v3_v3fl(background.vec3, (float[3]){0.5f, 0.7f, 1.0f}, t);
     //return background;
 
-     return (CUSTOM_Vector){0.0f, 0.0f, 0.0f};
+    return (CUSTOM_Vector){0.0f, 0.0f, 0.0f};
   }
 }
 /******************************************************************
@@ -457,7 +459,7 @@ CUSTOM_Ray CUSTOM_CameraGetRay(const CUSTOM_Camera *cam, float s, float t)
  *  r             :float, radius of sphere
  *  material      :pointer of CUSTOM_Material, material of sphere
  */
-CUSTOM_Sphere *CUSTOM_SphereCreate(const float center[3], float r, CUSTOM_Material *material)
+CUSTOM_Sphere *CUSTOM_SphereCreate(const float center[3], float r, const CUSTOM_Material *material)
 {
   CUSTOM_Sphere *sphere = (CUSTOM_Sphere *)MEM_callocN(sizeof(CUSTOM_Sphere), "CUSTOM_Sphere");
 

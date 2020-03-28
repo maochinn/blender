@@ -180,7 +180,7 @@ CUSTOM_Camera *CUSTOM_CameraCreate(const float lookfrom[3],
                                    const float focus_dist);
 CUSTOM_Ray CUSTOM_CameraGetRay(const CUSTOM_Camera *cam, float s, float t);
 
-CUSTOM_Sphere *CUSTOM_SphereCreate(const float center[3], float r, CUSTOM_Material *material);
+CUSTOM_Sphere *CUSTOM_SphereCreate(const float center[3], float r, const CUSTOM_Material *material);
 CUSTOM_RectXY *CUSTOM_RectXYCreate(
     float x0, float x1, float y0, float y1, float k, const CUSTOM_Material *mat, bool flip_normal);
 CUSTOM_RectXZ *CUSTOM_RectXZCreate(
