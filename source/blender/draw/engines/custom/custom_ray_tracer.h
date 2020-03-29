@@ -1,6 +1,6 @@
 #pragma once
 
-#define CUSTOM_RECURSIVE_MAX 5
+#define CUSTOM_RECURSIVE_MAX 10
 
 // vector 4
 typedef union CUSTOM_Vector {
@@ -93,6 +93,7 @@ enum {
   CUSTOM_RECT_XZ,
   CUSTOM_RECT_YZ,
   CUSTOM_BOX,
+  CUSTOM_TRIANGLE,
   CUSTOM_HITTABLE_MAX
 };
 
@@ -107,7 +108,6 @@ typedef struct CUSTOM_Sphere {
   CUSTOM_Material *mat_ptr;
   CUSTOM_Vector center;  // vec3
   float radius;
-  // CUSTOM_Sphere() : type(CUSTOM_SPHERE){ }
 } CUSTOM_Sphere;
 typedef struct CUSTOM_RectXY {
   struct CUSTOM_Hittable *next, *prev;
@@ -144,6 +144,16 @@ typedef struct CUSTOM_Box {
   ListBase faces;
 
 } CUSTOM_Box;
+typedef struct CUSTOM_Triangle {
+  struct CUSTOM_Hittable *next, *prev;
+  short type;
+
+  CUSTOM_Material *mat_ptr;
+  CUSTOM_Vector v0, v1, v2;
+  CUSTOM_Vector n0, n1, n2;
+  CUSTOM_Vector uv0, uv1, uv2;
+} CUSTOM_Triangle;
+
 
 typedef struct CUSTOM_HitRecord {
   float t;

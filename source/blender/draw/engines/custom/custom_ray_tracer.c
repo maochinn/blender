@@ -319,6 +319,112 @@ bool CUSTOM_Box_hit(
   // return list_hit(rec, ray, &box->faces, t0, t1);
 }
 
+bool CUSTOM_Triangle_hit(
+    CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_Triangle *tri, float t0, float t1)
+{
+  // compute plane's normal
+  // Vec3f v0v1 = v1 - v0;
+  // Vec3f v0v2 = v2 - v0;
+  float v0v1[3], v0v2[3];
+  sub_v3_v3v3(v0v1, tri->v1.vec3, tri->v0.vec3);
+  sub_v3_v3v3(v0v2, tri->v2.vec3, tri->v0.vec3);
+  // no need to normalize
+  // Vec3f N = v0v1.crossProduct(v0v2);  // N
+  float N[3];
+  cross_v3_v3v3(N, v0v1, v0v2);
+  //float area2 = N.length();
+  float area2 = len_v3(N);
+
+  // Step 1: finding P
+
+  // check if ray and plane are parallel ?
+  //float NdotRayDirection = N.dotProduct(dir);
+  float N_dot_raydir = dot_v3v3(N, ray->direction.vec3);
+  if (fabs(N_dot_raydir) < 0.01f)  // almost 0
+    return false;                         // they are parallel so they don't intersect !
+
+  // compute d parameter using equation 2
+  //float d = N.dotProduct(v0);
+  float d = dot_v3v3(N, tri->v0.vec3);
+
+  // compute t (equation 3)
+  //t = (N.dotProduct(orig) + d) / NdotRayDirection;
+  float t = (dot_v3v3(N, ray->origin.vec3) + d) / N_dot_raydir;
+  // check if the triangle is in behind the ray
+  if (t < 0)
+    return false;  // the triangle is behind
+
+  // compute the intersection point using equation 1
+  //Vec3f P = orig + t * dir;
+  //float P[3];
+  //madd_v3_v3v3fl(P, ray->origin.vec3, ray->direction.vec3, t);
+  CUSTOM_Vector P = pointAtParameter(ray, t);
+  
+
+  // Step 2: inside-outside test
+  //Vec3f C;  // vector perpendicular to triangle's plane
+  float C[3];
+
+  // edge 0
+  //Vec3f edge0 = v1 - v0;
+  //Vec3f vp0 = P - v0;
+  //C = edge0.crossProduct(vp0);
+  //if (N.dotProduct(C) < 0)
+  //  return false;  // P is on the right side
+  float edge0[3], vp0[3];
+  sub_v3_v3v3(edge0, tri->v1.vec3, tri->v0.vec3);
+  sub_v3_v3v3(vp0, P.vec3, tri->v0.vec3);
+  cross_v3_v3v3(C, edge0, vp0);
+  if (dot_v3v3(N, C) < 0.0f)
+    return false;
+
+  // edge 1
+  //Vec3f edge1 = v2 - v1;
+  //Vec3f vp1 = P - v1;
+  //C = edge1.crossProduct(vp1);
+  //if (N.dotProduct(C) < 0)
+  //  return false;  // P is on the right side
+  float edge1[3], vp1[3];
+  sub_v3_v3v3(edge1, tri->v2.vec3, tri->v1.vec3);
+  sub_v3_v3v3(vp1, P.vec3, tri->v1.vec3);
+  cross_v3_v3v3(C, edge1, vp1);
+  if (dot_v3v3(N, C) < 0.0f)
+    return false;
+
+  // edge 2
+  //Vec3f edge2 = v0 - v2;
+  //Vec3f vp2 = P - v2;
+  //C = edge2.crossProduct(vp2);
+  //if (N.dotProduct(C) < 0)
+  //  return false;  // P is on the right side;
+  float edge2[3], vp2[3];
+  sub_v3_v3v3(edge2, tri->v0.vec3, tri->v2.vec3);
+  sub_v3_v3v3(vp2, P.vec3, tri->v2.vec3);
+  cross_v3_v3v3(C, edge2, vp2);
+  if (dot_v3v3(N, C) < 0.0f)
+    return false;
+
+  float uv[2];
+  float w[3] = {
+      1.0f / len_v3v3(P.vec3, tri->v0.vec3),
+      1.0f / len_v3v3(P.vec3, tri->v1.vec3),
+      1.0f / len_v3v3(P.vec3, tri->v2.vec3),
+  };
+  float normal[3];
+
+  interp_v2_v2v2v2(uv, tri->uv0.vec2, tri->uv1.vec2, tri->uv2.vec2, w);
+  interp_v3_v3v3v3(normal, tri->n0.vec3, tri->n1.vec3, tri->n2.vec3, w);
+
+  rec->u = uv[0];
+  rec->v = uv[1];
+  rec->t = t;
+  rec->mat_ptr = tri->mat_ptr;
+  rec->position = P;
+  rec->normal = (CUSTOM_Vector){normal[0], normal[1], normal[2]};
+
+  return true;  // this ray hits the triangle
+}
+
 /******************************************************************
  * Sampling Color by a ray
  * Return:
@@ -332,12 +438,11 @@ CUSTOM_Vector CUSTOM_sampleColor(const CUSTOM_Ray *ray, const ListBase *world, i
 {
   CUSTOM_HitRecord rec;
   if (list_hit(&rec, ray, world, 0.01f, FLT_MAX)) {
-    //return (CUSTOM_Vector){1.0f, 0.0f, 0.0f};
+    // return (CUSTOM_Vector){1.0f, 0.0f, 0.0f};
     CUSTOM_Ray scattered;
     CUSTOM_Vector attenuation;
 
     CUSTOM_Vector emitted = materialEmitted(rec.u, rec.v, &rec.position, rec.mat_ptr);
-    
 
     if (depth < CUSTOM_RECURSIVE_MAX &&
         materialScatter(&scattered, &attenuation, ray, &rec, rec.mat_ptr)) {
@@ -349,19 +454,17 @@ CUSTOM_Vector CUSTOM_sampleColor(const CUSTOM_Ray *ray, const ListBase *world, i
     else {
       return emitted;
     }
-
-
   }
   else {
-    //float unit_direction[3];
-    //normalize_v3_v3(unit_direction, ray->direction.vec3);
-    //float t = 0.5f * (unit_direction[2] + 1.0f);
+    // float unit_direction[3];
+    // normalize_v3_v3(unit_direction, ray->direction.vec3);
+    // float t = 0.5f * (unit_direction[2] + 1.0f);
 
-    //CUSTOM_Vector background;
+    // CUSTOM_Vector background;
     //// return (1.0 - t) * vec3(1.0, 1.0, 1.0) + t * vec3(0.5, 0.7, 1.0);
-    //mul_v3_v3fl(background.vec3, (float[3]){1.0f, 1.0f, 1.0f}, 1.0f - t);
-    //madd_v3_v3fl(background.vec3, (float[3]){0.5f, 0.7f, 1.0f}, t);
-    //return background;
+    // mul_v3_v3fl(background.vec3, (float[3]){1.0f, 1.0f, 1.0f}, 1.0f - t);
+    // madd_v3_v3fl(background.vec3, (float[3]){0.5f, 0.7f, 1.0f}, t);
+    // return background;
 
     return (CUSTOM_Vector){0.0f, 0.0f, 0.0f};
   }
@@ -566,6 +669,36 @@ CUSTOM_Box *CUSTOM_BoxCreate(const float p_min[3],
 
   return box;
 }
+CUSTOM_Triangle *CUSTOM_TriangleCreate(const float v0[3],
+                                       const float v1[3],
+                                       const float v2[3],
+                                       const float n0[3],
+                                       const float n1[3],
+                                       const float n2[3],
+                                       const float uv0[3],
+                                       const float uv1[3],
+                                       const float uv2[3],
+                                       const CUSTOM_Material *mat)
+{
+  CUSTOM_Triangle *tri = (CUSTOM_Triangle *)MEM_callocN(sizeof(CUSTOM_Triangle),
+                                                        "CUSTOM_Triangle");
+  tri->type = CUSTOM_TRIANGLE;
+  tri->prev = NULL;
+  tri->next = NULL;
+
+  tri->v0 = (CUSTOM_Vector){v0[0], v0[1], v0[2]};
+  tri->v1 = (CUSTOM_Vector){v1[0], v1[1], v1[2]};
+  tri->v2 = (CUSTOM_Vector){v2[0], v2[1], v2[2]};
+  tri->n0 = (CUSTOM_Vector){n0[0], n0[1], n0[2]};
+  tri->n1 = (CUSTOM_Vector){n1[0], n1[1], n1[2]};
+  tri->n2 = (CUSTOM_Vector){n2[0], n2[1], n2[2]};
+  tri->uv0 = (CUSTOM_Vector){uv0[0], uv0[1], uv0[2]};
+  tri->uv1 = (CUSTOM_Vector){uv1[0], uv1[1], uv1[2]};
+  tri->uv2 = (CUSTOM_Vector){uv2[0], uv2[1], uv2[2]};
+  tri->mat_ptr = mat;
+
+  return tri;
+}
 
 /******************************************************************
  * Create a image with 4 channel float rgba
@@ -658,12 +791,12 @@ bool CUSTOM_LambertianScatter(CUSTOM_Ray *scattered,
                               const CUSTOM_HitRecord *rec,
                               const CUSTOM_Lambertian *lamb)
 {
-  float target[3]; 
-   CUSTOM_Vector random = randomInUnitSphere();
-   add_v3_v3v3(target, rec->position.vec3, rec->normal.vec3);
-   add_v3_v3(target, random.vec3);
-  //CUSTOM_Vector random = randomInUnitHemisphere(&rec->normal);
-  //add_v3_v3v3(target, rec->position.vec3, random.vec3);
+  float target[3];
+  CUSTOM_Vector random = randomInUnitSphere();
+  add_v3_v3v3(target, rec->position.vec3, rec->normal.vec3);
+  add_v3_v3(target, random.vec3);
+  // CUSTOM_Vector random = randomInUnitHemisphere(&rec->normal);
+  // add_v3_v3v3(target, rec->position.vec3, random.vec3);
 
   copy_v3_v3(scattered->origin.vec3, rec->position.vec3);
   sub_v3_v3v3(scattered->direction.vec3, target, rec->position.vec3);

@@ -7,8 +7,10 @@
 #include "BKE_camera.h"
 #include "BKE_mesh.h"
 #include "BKE_node.h"
+#include "BKE_image.h"
 
 #include "DEG_depsgraph_query.h"
+#include "IMB_imbuf_types.h"
 
 #include "DNA_world_types.h"
 
@@ -2145,33 +2147,68 @@ static void custom_cache_populate(void *vedata, Object *ob)
     const CUSTOM_Material *material = CUSTOM_LambertianCreate(
         (float[3]){0.5f, 0.5f, 0.5f}, CUSTOM_ConstantTextureCreate((float[3]){0.5f, 0.5f, 0.5f}));
 
-    if (mesh->mat[0])
-    {
+    if (mesh->mat[0] && mesh->mat[0]->use_nodes) {
       const ListBase nodes = mesh->mat[0]->nodetree->nodes;
       for (const bNode *node = nodes.first; node; node = node->next) {
-        if (node->type == SH_NODE_BSDF_DIFFUSE) {
-          for (const bNodeSocket *iosock = node->inputs.first; iosock; iosock = iosock->next) {
-            if (strncmp("Color", iosock->name, 5) == 0 && iosock->type == SOCK_RGBA) {
-              const float *color = (float *)iosock->default_value;
-              material = CUSTOM_LambertianCreate(
-                  (float[3]){0.5f, 0.5f, 0.5f},
-                  CUSTOM_ConstantTextureCreate((float[3]){color[0], color[1], color[2]}));
-              break;
+        if (node->type == SH_NODE_TEX_IMAGE) {
+          NodeTexImage *tex = node->storage;
+          Image *ima = (Image *)node->id;
+          ImBuf *ibuf;
+          void *lock;
+          int i, size;
+
+          ibuf = BKE_image_acquire_ibuf(ima, NULL, &lock);
+
+          if (ibuf) {
+            size = ibuf->x * ibuf->y * ibuf->channels;
+            float *pixels = (float *)MEM_callocN(sizeof(float) * size, "float array");
+
+            if (ibuf->rect_float) {
+              memcpy(pixels, ibuf->rect_float, sizeof(float) * size);
             }
+            else {
+              for (i = 0; i < size; i++) {
+                pixels[i] = ((unsigned char *)ibuf->rect)[i] * (1.0f / 255.0f);
+              }
+            }
+            material = CUSTOM_LambertianCreate(
+                (float[3]){0.5f, 0.5f, 0.5f}, CUSTOM_ImageTextureCreate(pixels, ibuf->x, ibuf->y));
           }
-          break;
+
+          BKE_image_release_ibuf(ima, ibuf, lock);
+        }
+        else if (node->type == SH_NODE_BSDF_DIFFUSE) {
+          float color[3] = {1.0f, 0.0f, 0.0f};
+          for (const bNodeSocket *iosock = node->inputs.first; iosock; iosock = iosock->next) {
+              if (strcmp("Color", iosock->name) == 0 && iosock->type == SOCK_RGBA)
+                copy_v3_v3(color, ((bNodeSocketValueRGBA *)iosock->default_value)->value);
+          }
+          material = CUSTOM_LambertianCreate(
+              (float[3]){0.5f, 0.5f, 0.5f},
+              CUSTOM_ConstantTextureCreate((float[3]){color[0], color[1], color[2]}));
+        }
+        else if (node->type == SH_NODE_BSDF_GLOSSY) {
+          float color[3] = {1.0f, 0.0f, 0.0f};
+          float roughness = 0.0f;
+          for (const bNodeSocket *iosock = node->inputs.first; iosock; iosock = iosock->next) {
+            if (strcmp("Color", iosock->name) == 0 && iosock->type == SOCK_RGBA)
+              copy_v3_v3(color, ((bNodeSocketValueRGBA *)iosock->default_value)->value);
+            else if (strcmp("Roughness", iosock->name) == 0 && iosock->type == SOCK_FLOAT)
+              roughness = ((bNodeSocketValueFloat *)iosock->default_value)->value;
+          }
+          material = CUSTOM_MetalCreate((float[3]){0.5f, 0.5f, 0.5f}, roughness);
         }
       }
     }
     if (strncmp("OBSphere", ob->id.name, 8) == 0) {
       BLI_addtail(
           &pd->world,
-          CUSTOM_SphereCreate((float[3]){loc[0], loc[1], loc[2]}, 0.5f * ob->scale[0], material));
+          CUSTOM_SphereCreate((float[3]){loc[0], loc[1], loc[2]}, 1.0f * ob->scale[0], material));
     }
     else if (strncmp("OBCube", ob->id.name, 6) == 0) {
       float min[3], max[3];
-      madd_v3_v3v3v3(min, loc, (float[3]){-0.5f, -0.5f, -0.5f}, ob->scale);
-      madd_v3_v3v3v3(max, loc, (float[3]){0.5f, 0.5f, 0.5f}, ob->scale);
+      madd_v3_v3v3v3(min, loc, (float[3]){-1.0f, -1.0f, -1.0f}, ob->scale);
+      madd_v3_v3v3v3(max, loc, (float[3]){1.0f, 1.0f, 1.0f}, ob->scale);
       BLI_addtail(&pd->world, CUSTOM_BoxCreate(min, max, material));
     }
     else if (strncmp("OBPlane", ob->id.name, 7) == 0) {
@@ -2183,28 +2220,28 @@ static void custom_cache_populate(void *vedata, Object *ob)
       BKE_mesh_calc_poly_normal(mpoly, mesh->mloop + mpoly->loopstart, mesh->mvert, normal);
       if (dimension[0] <= 0.001f)
         BLI_addtail(&pd->world,
-                    CUSTOM_RectYZCreate(loc[1] - 0.5f * ob->scale[1],
-                                        loc[1] + 0.5f * ob->scale[1],
-                                        loc[2] - 0.5f * ob->scale[2],
-                                        loc[2] + 0.5f * ob->scale[2],
+                    CUSTOM_RectYZCreate(loc[1] - 1.0f * ob->scale[1],
+                                        loc[1] + 1.0f * ob->scale[1],
+                                        loc[2] - 1.0f * ob->scale[2],
+                                        loc[2] + 1.0f * ob->scale[2],
                                         loc[0],
                                         material,
                                         normal[0] < 0.0f ? true : false));
       else if (dimension[1] <= 0.001f)
         BLI_addtail(&pd->world,
-                    CUSTOM_RectXZCreate(loc[0] - 0.5f * ob->scale[0],
-                                        loc[0] + 0.5f * ob->scale[0],
-                                        loc[2] - 0.5f * ob->scale[2],
-                                        loc[2] + 0.5f * ob->scale[2],
+                    CUSTOM_RectXZCreate(loc[0] - 1.0f * ob->scale[0],
+                                        loc[0] + 1.0f * ob->scale[0],
+                                        loc[2] - 1.0f * ob->scale[2],
+                                        loc[2] + 1.0f * ob->scale[2],
                                         loc[1],
                                         material,
                                         normal[1] < 0.0f ? true : false));
       else if (dimension[2] <= 0.001f)
         BLI_addtail(&pd->world,
-                    CUSTOM_RectXYCreate(loc[0] - 0.5f * ob->scale[0],
-                                        loc[0] + 0.5f * ob->scale[0],
-                                        loc[1] - 0.5f * ob->scale[1],
-                                        loc[1] + 0.5f * ob->scale[1],
+                    CUSTOM_RectXYCreate(loc[0] - 1.0f * ob->scale[0],
+                                        loc[0] + 1.0f * ob->scale[0],
+                                        loc[1] - 1.0f * ob->scale[1],
+                                        loc[1] + 1.0f * ob->scale[1],
                                         loc[2],
                                         material,
                                         normal[2] < 0.0f ? true : false));
