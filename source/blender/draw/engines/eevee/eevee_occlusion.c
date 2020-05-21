@@ -41,6 +41,8 @@ static struct {
   struct GPUShader *gtao_sh;
   struct GPUShader *gtao_layer_sh;
   struct GPUShader *gtao_debug_sh;
+  struct GPUShader *ssao_sh;
+  struct GPUShader *ssao_debug_sh;
 
   struct GPUTexture *dummy_horizon_tx;
 } e_data = {NULL}; /* Engine data */
@@ -50,6 +52,7 @@ extern char datatoc_common_view_lib_glsl[];
 extern char datatoc_common_uniforms_lib_glsl[];
 extern char datatoc_bsdf_common_lib_glsl[];
 extern char datatoc_effect_gtao_frag_glsl[];
+extern char datatoc_effect_ssao_frag_glsl[];
 
 static void eevee_create_shader_occlusion(void)
 {
@@ -59,11 +62,21 @@ static void eevee_create_shader_occlusion(void)
                                     datatoc_ambient_occlusion_lib_glsl,
                                     datatoc_effect_gtao_frag_glsl);
 
+  char *ssao_frag_str = BLI_string_joinN(datatoc_common_view_lib_glsl,
+                                         datatoc_common_uniforms_lib_glsl,
+                                         datatoc_bsdf_common_lib_glsl,
+                                         datatoc_ambient_occlusion_lib_glsl,
+                                         datatoc_effect_ssao_frag_glsl);
+
   e_data.gtao_sh = DRW_shader_create_fullscreen(frag_str, NULL);
   e_data.gtao_layer_sh = DRW_shader_create_fullscreen(frag_str, "#define LAYERED_DEPTH\n");
   e_data.gtao_debug_sh = DRW_shader_create_fullscreen(frag_str, "#define DEBUG_AO\n");
 
+  e_data.ssao_sh = DRW_shader_create_fullscreen(ssao_frag_str, NULL);
+  e_data.ssao_debug_sh = DRW_shader_create_fullscreen(ssao_frag_str, "#define DEBUG_AO\n");
+
   MEM_freeN(frag_str);
+  MEM_freeN(ssao_frag_str);
 }
 
 int EEVEE_occlusion_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
@@ -118,6 +131,22 @@ int EEVEE_occlusion_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     }
     else {
       effects->gtao_horizons_debug = NULL;
+    }
+
+    effects->ssao = DRW_texture_pool_query_2d(
+        fs_size[0], fs_size[1], GPU_RGBA8, &draw_engine_eevee_type);
+    GPU_framebuffer_ensure_config(&fbl->ssao_fb,
+                                  {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(effects->ssao)});
+
+    if (G.debug_value == 33) {
+      effects->ssao_debug = DRW_texture_pool_query_2d(
+          fs_size[0], fs_size[1], GPU_RGBA8, &draw_engine_eevee_type);
+      GPU_framebuffer_ensure_config(
+          &fbl->ssao_debug_fb,
+          {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(effects->ssao_debug)});
+    }
+    else {
+      effects->ssao_debug = NULL;
     }
 
     return EFFECT_GTAO | EFFECT_NORMAL_BUFFER;
@@ -229,6 +258,26 @@ void EEVEE_occlusion_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
       DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
       DRW_shgroup_call(grp, quad, NULL);
     }
+
+    DRW_PASS_CREATE(psl->ssao, DRW_STATE_WRITE_COLOR);
+    grp = DRW_shgroup_create(e_data.ssao_sh, psl->ssao);
+    DRW_shgroup_uniform_texture(grp, "utilTex", EEVEE_materials_get_util_tex());
+    DRW_shgroup_uniform_texture_ref(grp, "maxzBuffer", &txl->maxzbuffer);
+    DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &effects->ao_src_depth);
+    DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+    DRW_shgroup_call(grp, quad, NULL);
+
+    if (G.debug_value == 33) {
+      DRW_PASS_CREATE(psl->ssao_debug, DRW_STATE_WRITE_COLOR);
+      grp = DRW_shgroup_create(e_data.ssao_debug_sh, psl->ssao_debug);
+      DRW_shgroup_uniform_texture(grp, "utilTex", EEVEE_materials_get_util_tex());
+      DRW_shgroup_uniform_texture_ref(grp, "maxzBuffer", &txl->maxzbuffer);
+      DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &dtxl->depth);
+      DRW_shgroup_uniform_texture_ref(grp, "normalBuffer", &effects->ssr_normal_input);
+      DRW_shgroup_uniform_texture_ref(grp, "horizonBuffer", &effects->ssao);
+      DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+      DRW_shgroup_call(grp, quad, NULL);
+    }
   }
 }
 
@@ -267,6 +316,28 @@ void EEVEE_occlusion_compute(EEVEE_ViewLayerData *UNUSED(sldata),
 
     DRW_stats_group_end();
   }
+
+  if ((effects->enabled_effects & EFFECT_GTAO) != 0) {
+    DRW_stats_group_start("SSAO");
+    effects->ao_src_depth = depth_src;
+    //effects->ao_depth_layer = layer;
+
+    GPU_framebuffer_bind(fbl->ssao_fb);
+
+
+    DRW_draw_pass(psl->ssao);
+
+    if (GPU_mip_render_workaround() ||
+        GPU_type_matches(GPU_DEVICE_INTEL_UHD, GPU_OS_WIN, GPU_DRIVER_ANY)) {
+      /* Fix dot corruption on intel HD5XX/HD6XX series. */
+      GPU_flush();
+    }
+
+    /* Restore */
+    GPU_framebuffer_bind(fbl->main_fb);
+
+    DRW_stats_group_end();
+  }
 }
 
 void EEVEE_occlusion_draw_debug(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
@@ -281,6 +352,18 @@ void EEVEE_occlusion_draw_debug(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data 
 
     GPU_framebuffer_bind(fbl->gtao_debug_fb);
     DRW_draw_pass(psl->ao_horizon_debug);
+
+    /* Restore */
+    GPU_framebuffer_bind(fbl->main_fb);
+
+    DRW_stats_group_end();
+  }
+
+  if (((effects->enabled_effects & EFFECT_GTAO) != 0) && (G.debug_value == 33)) {
+    DRW_stats_group_start("SSAO Debug");
+
+    GPU_framebuffer_bind(fbl->ssao_debug_fb);
+    DRW_draw_pass(psl->ssao_debug);
 
     /* Restore */
     GPU_framebuffer_bind(fbl->main_fb);
@@ -315,4 +398,7 @@ void EEVEE_occlusion_free(void)
   DRW_SHADER_FREE_SAFE(e_data.gtao_layer_sh);
   DRW_SHADER_FREE_SAFE(e_data.gtao_debug_sh);
   DRW_TEXTURE_FREE_SAFE(e_data.dummy_horizon_tx);
+
+  DRW_SHADER_FREE_SAFE(e_data.ssao_sh);
+  DRW_SHADER_FREE_SAFE(e_data.ssao_debug_sh);
 }

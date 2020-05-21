@@ -408,6 +408,29 @@ static void eevee_draw_background(void *vedata)
         DRW_transform_to_display(effects->velocity_tx, false, false);
       }
       break;
+    case 12:
+      if (effects->source_buffer) {
+        DRW_transform_to_display(effects->source_buffer, false, false);
+      }
+      break;
+    case 13:
+      if (txl->depth_double_buffer) {
+        DRW_transform_to_display(txl->depth_double_buffer, false, false);
+      }
+    case 14:
+      if (effects->ssr_normal_input) {
+        DRW_transform_to_display(effects->ssr_normal_input, false, false);
+      }
+    case 15:
+      if (dtxl->depth) {
+        DRW_transform_to_display(dtxl->depth, false, false);
+      }
+    case 33:
+      if (effects->ssao_debug) {
+        DRW_transform_to_display(effects->ssao_debug, false, false);
+      }
+
+      break;
     default:
       break;
   }
