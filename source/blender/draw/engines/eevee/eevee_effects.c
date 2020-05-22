@@ -160,6 +160,10 @@ void EEVEE_effects_init(EEVEE_ViewLayerData *sldata,
   effects->enabled_effects |= EEVEE_occlusion_init(sldata, vedata);
   effects->enabled_effects |= EEVEE_screen_raytrace_init(sldata, vedata);
 
+  if ((effects->enabled_effects & EFFECT_GTAO) != 0) {
+    EEVEE_mao_init(sldata, vedata);
+  }
+
   if ((effects->enabled_effects & EFFECT_TAA) && effects->taa_current_sample > 1) {
     /* Update matrices here because EEVEE_screen_raytrace_init can have reset the
      * taa_current_sample. (See T66811) */

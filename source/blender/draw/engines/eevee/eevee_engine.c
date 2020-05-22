@@ -104,6 +104,7 @@ static void eevee_cache_init(void *vedata)
   EEVEE_materials_cache_init(sldata, vedata);
   EEVEE_motion_blur_cache_init(sldata, vedata);
   EEVEE_occlusion_cache_init(sldata, vedata);
+  EEVEE_mao_cache_init(sldata, vedata);
   EEVEE_screen_raytrace_cache_init(sldata, vedata);
   EEVEE_subsurface_cache_init(sldata, vedata);
   EEVEE_temporal_sampling_cache_init(sldata, vedata);
@@ -278,6 +279,7 @@ static void eevee_draw_background(void *vedata)
     DRW_stats_group_end();
 
     EEVEE_occlusion_compute(sldata, vedata, dtxl->depth, -1);
+    EEVEE_mao_compute(sldata, vedata, dtxl->depth);
     EEVEE_volumes_compute(sldata, vedata);
 
     /* Shading pass */
@@ -293,6 +295,7 @@ static void eevee_draw_background(void *vedata)
     EEVEE_subsurface_compute(sldata, vedata);
     EEVEE_reflection_compute(sldata, vedata);
     EEVEE_occlusion_draw_debug(sldata, vedata);
+    EEVEE_mao_draw_debug(sldata, vedata);
     if (psl->probe_display) {
       DRW_draw_pass(psl->probe_display);
     }
@@ -408,36 +411,10 @@ static void eevee_draw_background(void *vedata)
         DRW_transform_to_display(effects->velocity_tx, false, false);
       }
       break;
-    case 12:
-      if (effects->source_buffer) {
-        DRW_transform_to_display(effects->source_buffer, false, false);
-      }
-      break;
-    case 13:
-      if (txl->depth_double_buffer) {
-        DRW_transform_to_display(txl->depth_double_buffer, false, false);
-      }
-      break;
-    case 14:
-      if (effects->ssr_normal_input) {
-        DRW_transform_to_display(effects->ssr_normal_input, false, false);
-      }
-      break;
-    case 15:
-      if (dtxl->depth) {
-        DRW_transform_to_display(dtxl->depth, false, false);
-      }
-      break;
     case 33:
-      if (effects->ssao_debug) {
-        DRW_transform_to_display(effects->ssao_debug, false, false);
+      if (effects->mao_debug) {
+        DRW_transform_to_display(effects->mao_debug, false, false);
       }
-      break;
-    case 34:
-      if (effects->ssao) {
-        DRW_transform_to_display(effects->ssao, false, false);
-      }
-      break;
     default:
       break;
   }
@@ -537,6 +514,7 @@ static void eevee_engine_free(void)
   EEVEE_mist_free();
   EEVEE_motion_blur_free();
   EEVEE_occlusion_free();
+  EEVEE_mao_free();
   EEVEE_screen_raytrace_free();
   EEVEE_subsurface_free();
   EEVEE_volumes_free();

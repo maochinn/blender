@@ -215,7 +215,7 @@ typedef struct EEVEE_PassList {
   struct DRWPass *ao_horizon_debug;
   struct DRWPass *ao_accum_ps;
   struct DRWPass *ssao;
-  struct DRWPass *ssao_debug;
+  struct DRWPass *mao_debug;
   struct DRWPass *mist_accum_ps;
   struct DRWPass *motion_blur;
   struct DRWPass *bloom_blit;
@@ -281,7 +281,7 @@ typedef struct EEVEE_FramebufferList {
   struct GPUFrameBuffer *gtao_fb;
   struct GPUFrameBuffer *gtao_debug_fb;
   struct GPUFrameBuffer *ssao_fb;
-  struct GPUFrameBuffer *ssao_debug_fb;
+  struct GPUFrameBuffer *mao_debug_fb;
   struct GPUFrameBuffer *downsample_fb;
   struct GPUFrameBuffer *bloom_blit_fb;
   struct GPUFrameBuffer *bloom_down_fb[MAX_BLOOM_STEP];
@@ -570,7 +570,7 @@ typedef struct EEVEE_EffectsInfo {
   struct GPUTexture *gtao_horizons_debug;
 
   struct GPUTexture *ssao;
-  struct GPUTexture *ssao_debug;
+  struct GPUTexture *mao_debug;
   /* Motion Blur */
   float current_world_to_ndc[4][4];
   float current_ndc_to_world[4][4];
@@ -1015,12 +1015,14 @@ void EEVEE_occlusion_compute(EEVEE_ViewLayerData *sldata,
 void EEVEE_occlusion_draw_debug(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
 void EEVEE_occlusion_free(void);
 
-void EEVEE_ssao_compute(EEVEE_ViewLayerData *sldata,
+/* eevee_mao.c*/
+int EEVEE_mao_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
+void EEVEE_mao_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
+void EEVEE_mao_compute(EEVEE_ViewLayerData *sldata,
                              EEVEE_Data *vedata,
-                             struct GPUTexture *depth_src,
-                             int layer);
-void EEVEE_ssao_draw_debug(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
-void EEVEE_ssao_free(void);
+                             struct GPUTexture *depth_src);
+void EEVEE_mao_draw_debug(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);
+void EEVEE_mao_free(void);
 
 /* eevee_screen_raytrace.c */
 int EEVEE_screen_raytrace_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata);

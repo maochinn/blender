@@ -1,6 +1,6 @@
 out vec4 FragColor;
 
-#ifdef DEBUG_AO
+#ifdef DEBUG_MAO
 uniform sampler2D occlusionBuffer;
 
 void main()
@@ -8,15 +8,14 @@ void main()
   vec2 texel_size = 1.0 / vec2(textureSize(occlusionBuffer, 0)).xy;
   vec2 uvs = saturate(gl_FragCoord.xy * texel_size);
 
-  vec3 occlusion = textureLod(occlusionBuffer, uvs, 0.0).rgb;
-  FragColor = vec4(vec3(1.0) - occlusion, 1.0);
+  float occlusion = textureLod(occlusionBuffer, uvs, 0.0).r;
+  FragColor = vec4(vec3(occlusion), 1.0);
 }
 
 #else
+layout(location = 0) out float occlusion_factor;
+
 uniform sampler2D normalBuffer;
-
-uniform float rotationOffset;
-
 void main()
 {
   vec2 uvs = saturate(gl_FragCoord.xy / vec2(textureSize(depthBuffer, 0).xy));
@@ -44,7 +43,7 @@ void main()
   for (float i = 0; i < sampleCount; i++) {
     // sample
     vec3 L = sample_hemisphere(i, N, T, B); /* Microfacet normal */
-    vec3 viewSample = viewPosition + L * rotationOffset;
+    vec3 viewSample = viewPosition + L * aoDistance;
 
     vec4 offset = vec4(viewSample, 1.0);
     offset = ProjectionMatrix * offset;   // from view to clip-space
@@ -56,12 +55,13 @@ void main()
     float sampleDepthZ = get_view_z_from_depth(sampleDepth);
 
     // range check & accumulate
-    float rangeCheck = smoothstep(0.0, 1.0, rotationOffset / abs(viewPosition.z - sampleDepthZ));
+    float rangeCheck = smoothstep(0.0, 1.0, aoDistance / abs(viewPosition.z - sampleDepthZ));
     occlusion += (sampleDepthZ >= viewSample.z ? 1.0 : 0.0) * rangeCheck;
   }
   occlusion = occlusion / sampleCount;
-  //occlusion = 1.0 - (occlusion / sampleCount);
+  // occlusion = 1.0 - (occlusion / sampleCount);
 
-  FragColor = vec4(occlusion, occlusion, occlusion, 1.0);
+  // FragColor = vec4(occlusion, occlusion, occlusion, 1.0);
+  occlusion_factor = (1.0 - occlusion);
 }
 #endif
