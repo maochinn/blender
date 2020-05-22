@@ -1,55 +1,26 @@
-/**
- * This shader only compute maximum horizon angles for each directions.
- * The final integration is done at the resolve stage with the shading normal.
- */
-
-uniform float rotationOffset;
-
 out vec4 FragColor;
 
 #ifdef DEBUG_AO
-uniform sampler2D normalBuffer;
+uniform sampler2D occlusionBuffer;
 
 void main()
 {
-  vec2 texel_size = 1.0 / vec2(textureSize(depthBuffer, 0)).xy;
+  vec2 texel_size = 1.0 / vec2(textureSize(occlusionBuffer, 0)).xy;
   vec2 uvs = saturate(gl_FragCoord.xy * texel_size);
 
-  float depth = textureLod(depthBuffer, uvs, 0.0).r;
-
-  vec3 viewPosition = get_view_space_from_depth(uvs, depth);
-  vec3 V = viewCameraVec;
-  vec3 normal = normal_decode(texture(normalBuffer, uvs).rg, V);
-
-  vec3 bent_normal;
-  float visibility;
-
-  vec4 noise = texelfetch_noise_tex(gl_FragCoord.xy);
-
-  gtao_deferred(normal, noise, depth, visibility, bent_normal);
-
-  /* Handle Background case. Prevent artifact due to uncleared Horizon Render Target. */
-  FragColor = vec4((depth == 1.0) ? 0.0 : visibility);
+  vec3 occlusion = textureLod(occlusionBuffer, uvs, 0.0).rgb;
+  FragColor = vec4(vec3(1.0) - occlusion, 1.0);
 }
 
 #else
+uniform sampler2D normalBuffer;
 
-#  ifdef LAYERED_DEPTH
-uniform sampler2DArray depthBufferLayered;
-uniform int layer;
-#    define gtao_depthBuffer depthBufferLayered
-#    define gtao_textureLod(a, b, c) textureLod(a, vec3(b, layer), c)
-
-#  else
-#    define gtao_depthBuffer depthBuffer
-#    define gtao_textureLod(a, b, c) textureLod(a, b, c)
-
-#  endif
+uniform float rotationOffset;
 
 void main()
 {
-  vec2 uvs = saturate(gl_FragCoord.xy / vec2(textureSize(gtao_depthBuffer, 0).xy));
-  float depth = gtao_textureLod(gtao_depthBuffer, uvs, 0.0).r;
+  vec2 uvs = saturate(gl_FragCoord.xy / vec2(textureSize(depthBuffer, 0).xy));
+  float depth = textureLod(depthBuffer, uvs, 0.0).r;
 
   if (depth == 1.0) {
     /* Do not trace for background */
@@ -61,17 +32,36 @@ void main()
   depth = saturate(depth - 3e-6); /* Tweaked for 24bit depth buffer. */
 
   vec3 viewPosition = get_view_space_from_depth(uvs, depth);
-  vec4 noise = texelfetch_noise_tex(gl_FragCoord.xy);
-  vec2 max_dir = get_max_dir(viewPosition.z);
-  vec4 dirs;
-  dirs.xy = get_ao_dir(noise.x * 0.5);
-  dirs.zw = get_ao_dir(noise.x * 0.5 + 0.5);
+  vec3 V = viewCameraVec;
+  vec3 normal = normal_decode(texture(normalBuffer, uvs).rg, V);
 
-  /* Search in 4 directions. */
-  FragColor.xy = search_horizon_sweep(dirs.xy, viewPosition, uvs, noise.y, max_dir);
-  FragColor.zw = search_horizon_sweep(dirs.zw, viewPosition, uvs, noise.y, max_dir);
+  vec3 N, T, B;
+  N = normalize(normal);
+  make_orthonormal_basis(N, T, B); /* Generate tangent space */
 
-  /* Resize output for integer texture. */
-  FragColor = pack_horizons(FragColor);
+  // Iterate over the sample kernel and calculate occlusion factor
+  float occlusion = 0.0;
+  for (float i = 0; i < sampleCount; i++) {
+    // sample
+    vec3 L = sample_hemisphere(i, N, T, B); /* Microfacet normal */
+    vec3 viewSample = viewPosition + L * rotationOffset;
+
+    vec4 offset = vec4(viewSample, 1.0);
+    offset = ProjectionMatrix * offset;   // from view to clip-space
+    offset.xyz /= offset.w;               // perspective divide
+    offset.xyz = offset.xyz * 0.5 + 0.5;  // transform to range 0.0 - 1.0
+
+    // get sample depth
+    float sampleDepth = textureLod(depthBuffer, offset.xy, 0.0).r;
+    float sampleDepthZ = get_view_z_from_depth(sampleDepth);
+
+    // range check & accumulate
+    float rangeCheck = smoothstep(0.0, 1.0, rotationOffset / abs(viewPosition.z - sampleDepthZ));
+    occlusion += (sampleDepthZ >= viewSample.z ? 1.0 : 0.0) * rangeCheck;
+  }
+  occlusion = occlusion / sampleCount;
+  //occlusion = 1.0 - (occlusion / sampleCount);
+
+  FragColor = vec4(occlusion, occlusion, occlusion, 1.0);
 }
 #endif
