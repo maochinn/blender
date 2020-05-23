@@ -40,6 +40,9 @@
 static struct {
   /* Screen Space Ambient Occlusion */
   struct GPUShader *ssao_sh;
+  /* Screen Space Curvature*/
+  struct GPUShader *ssc_sh;
+
   struct GPUShader *mao_debug_sh;
 
   struct GPUTexture *hammersley;
@@ -62,8 +65,10 @@ static void eevee_mao_create_shader(void)
                                         datatoc_effect_mao_frag_glsl);
 
   e_data.ssao_sh = DRW_shader_create_fullscreen(
-      mao_frag_str, "#define HAMMERSLEY_SIZE " STRINGIFY(HAMMERSLEY_SIZE) "\n");
-  e_data.mao_debug_sh = DRW_shader_create_fullscreen(mao_frag_str, "#define DEBUG_MAO");
+      mao_frag_str, "#define SSAO\n" "#define HAMMERSLEY_SIZE " STRINGIFY(HAMMERSLEY_SIZE) "\n");
+  e_data.ssc_sh = DRW_shader_create_fullscreen(
+      mao_frag_str, "#define SSC\n");
+  e_data.mao_debug_sh = DRW_shader_create_fullscreen(mao_frag_str, "#define DEBUG_MAO\n");
 
   MEM_freeN(mao_frag_str);
 }
@@ -112,6 +117,10 @@ int EEVEE_mao_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
         fs_size[0], fs_size[1], GPU_R8, &draw_engine_eevee_type);
     GPU_framebuffer_ensure_config(&fbl->ssao_fb,
                                   {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(effects->ssao)});
+    effects->ssc = DRW_texture_pool_query_2d(
+        fs_size[0], fs_size[1], GPU_R8, &draw_engine_eevee_type);
+    GPU_framebuffer_ensure_config(&fbl->ssc_fb,
+                                  {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(effects->ssc)});
 
     if (G.debug_value == 33) {
       effects->mao_debug = DRW_texture_pool_query_2d(
@@ -154,10 +163,21 @@ void EEVEE_mao_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
     DRW_shgroup_uniform_texture(grp, "texHammersley", e_data.hammersley);    
     DRW_shgroup_call(grp, quad, NULL);
 
+    DRW_PASS_CREATE(psl->ssc, DRW_STATE_WRITE_COLOR);
+    grp = DRW_shgroup_create(e_data.ssc_sh, psl->ssc);
+    DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &effects->ao_src_depth);
+    DRW_shgroup_uniform_texture_ref(grp, "normalBuffer", &effects->ssr_normal_input);
+    DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
+    DRW_shgroup_call(grp, quad, NULL);
+
     if (G.debug_value == 33) {
       DRW_PASS_CREATE(psl->mao_debug, DRW_STATE_WRITE_COLOR);
       grp = DRW_shgroup_create(e_data.mao_debug_sh, psl->mao_debug);
+      DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &effects->ao_src_depth);
+      DRW_shgroup_uniform_texture_ref(grp, "normalBuffer", &effects->ssr_normal_input);
+      DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
       DRW_shgroup_uniform_texture_ref(grp, "occlusionBuffer", &effects->ssao);
+      DRW_shgroup_uniform_texture_ref(grp, "curvatureBuffer", &effects->ssc);
       DRW_shgroup_call(grp, quad, NULL);
     }
   }
@@ -178,8 +198,26 @@ void EEVEE_mao_compute(EEVEE_ViewLayerData *UNUSED(sldata),
 
     GPU_framebuffer_bind(fbl->ssao_fb);
 
-
     DRW_draw_pass(psl->ssao);
+
+    if (GPU_mip_render_workaround() ||
+        GPU_type_matches(GPU_DEVICE_INTEL_UHD, GPU_OS_WIN, GPU_DRIVER_ANY)) {
+      /* Fix dot corruption on intel HD5XX/HD6XX series. */
+      GPU_flush();
+    }
+
+    /* Restore */
+    GPU_framebuffer_bind(fbl->main_fb);
+
+    DRW_stats_group_end();
+
+    //
+    DRW_stats_group_start("SSC");
+    effects->ao_src_depth = depth_src;
+
+    GPU_framebuffer_bind(fbl->ssc_fb);
+
+    DRW_draw_pass(psl->ssc);
 
     if (GPU_mip_render_workaround() ||
         GPU_type_matches(GPU_DEVICE_INTEL_UHD, GPU_OS_WIN, GPU_DRIVER_ANY)) {
@@ -217,6 +255,7 @@ void EEVEE_mao_draw_debug(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedat
 void EEVEE_mao_free(void)
 {
   DRW_SHADER_FREE_SAFE(e_data.ssao_sh);
+  DRW_SHADER_FREE_SAFE(e_data.ssc_sh);
   DRW_SHADER_FREE_SAFE(e_data.mao_debug_sh);
   DRW_TEXTURE_FREE_SAFE(e_data.hammersley);
 }

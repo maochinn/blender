@@ -415,6 +415,17 @@ static void eevee_draw_background(void *vedata)
       if (effects->mao_debug) {
         DRW_transform_to_display(effects->mao_debug, false, false);
       }
+      break;
+    case 34:
+      if (effects->ssao) {
+        DRW_transform_to_display(effects->ssao, false, false);
+      }
+      break;
+    case 35:
+      if (effects->ssc) {
+        DRW_transform_to_display(effects->ssc, false, false);
+      }
+      break;
     default:
       break;
   }

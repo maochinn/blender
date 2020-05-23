@@ -215,6 +215,7 @@ typedef struct EEVEE_PassList {
   struct DRWPass *ao_horizon_debug;
   struct DRWPass *ao_accum_ps;
   struct DRWPass *ssao;
+  struct DRWPass *ssc;
   struct DRWPass *mao_debug;
   struct DRWPass *mist_accum_ps;
   struct DRWPass *motion_blur;
@@ -281,6 +282,7 @@ typedef struct EEVEE_FramebufferList {
   struct GPUFrameBuffer *gtao_fb;
   struct GPUFrameBuffer *gtao_debug_fb;
   struct GPUFrameBuffer *ssao_fb;
+  struct GPUFrameBuffer *ssc_fb;
   struct GPUFrameBuffer *mao_debug_fb;
   struct GPUFrameBuffer *downsample_fb;
   struct GPUFrameBuffer *bloom_blit_fb;
@@ -570,6 +572,7 @@ typedef struct EEVEE_EffectsInfo {
   struct GPUTexture *gtao_horizons_debug;
 
   struct GPUTexture *ssao;
+  struct GPUTexture *ssc;
   struct GPUTexture *mao_debug;
   /* Motion Blur */
   float current_world_to_ndc[4][4];
