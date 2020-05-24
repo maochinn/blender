@@ -28,13 +28,15 @@ void main()
   float D_curvature = abs(dFdx(curvature)) + abs(dFdy(curvature));
 
   float contour = dot(N, V) < 0.2 ? 1.0 - dot(N, V) : 0.0;
-  float suggestive_contour = curvature == 0.0 && D_curvature == 0.0 ? 1.0 : 0.0;
+  float suggestive_contour = curvature == 0.0 && D_curvature > 0.0 ? 1.0 : 0.0;
 
   vec3 color = vec3(occlusion);
-  color += contour * vec3(0.5, 0.0, 0.0);
-  color += suggestive_contour * vec3(0.0, 0.5, 0.0);
+  color = contour > 0 ? contour * vec3(1.0, 0.0, 0.0) : color;
+  color = suggestive_contour > 0 ? vec3(0.0, 1.0, 0.0) : color;
+  //color += contour * vec3(0.5, 0.0, 0.0);
+  //color += suggestive_contour * vec3(0.0, 0.5, 0.0);
 
-  FragColor = vec4(color * occlusion, 1.0);
+  FragColor = vec4(color, 1.0);
 }
 
 #elif defined(SSAO)
