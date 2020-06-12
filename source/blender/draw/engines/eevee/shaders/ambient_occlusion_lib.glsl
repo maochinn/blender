@@ -35,6 +35,7 @@ uniform sampler2DArray utilTex;
 #endif /* UTIL_TEX */
 
 uniform sampler2D horizonBuffer;
+uniform sampler2D occlusionBuffer;
 
 /* aoSettings flags */
 #define USE_AO 1
@@ -260,6 +261,8 @@ float occlusion_compute(vec3 N, vec3 vpos, float user_occlusion, vec4 rand, out 
 #  else
     gtao(vnor, vpos, rand, visibility, bent_normal);
 #  endif
+
+    visibility = texelFetch(occlusionBuffer, ivec2(gl_FragCoord.xy), 0).r;
 
     /* Prevent some problems down the road. */
     visibility = max(1e-3, visibility);

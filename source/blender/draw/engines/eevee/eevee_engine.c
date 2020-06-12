@@ -325,7 +325,7 @@ static void eevee_draw_background(void *vedata)
     EEVEE_draw_effects(sldata, vedata);
     DRW_stats_group_end();
 
-    EEVEE_renderpasses_output_accumulate(sldata, vedata);
+    //EEVEE_renderpasses_output_accumulate(sldata, vedata);
 
     DRW_view_set_active(NULL);
 

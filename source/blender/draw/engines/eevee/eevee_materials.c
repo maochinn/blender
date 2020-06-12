@@ -371,6 +371,7 @@ static void add_standard_uniforms(DRWShadingGroup *shgrp,
   }
   if ((use_diffuse || use_glossy) && !use_ssrefraction) {
     DRW_shgroup_uniform_texture_ref(shgrp, "horizonBuffer", &effects->gtao_horizons);
+    DRW_shgroup_uniform_texture_ref(shgrp, "occlusionBuffer", &effects->ssao);
   }
   if (use_diffuse) {
     DRW_shgroup_uniform_texture_ref(shgrp, "irradianceGrid", &lcache->grid_tx.tex);
