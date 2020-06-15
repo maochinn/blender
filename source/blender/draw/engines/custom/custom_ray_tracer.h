@@ -94,13 +94,27 @@ enum {
   CUSTOM_RECT_YZ,
   CUSTOM_BOX,
   CUSTOM_TRIANGLE,
+  CUSTOM_BVH_NODE,
   CUSTOM_HITTABLE_MAX
 };
+
+typedef struct CUSTOM_AABB {
+  CUSTOM_Vector min, max;
+} CUSTOM_AABB;
 
 typedef struct CUSTOM_Hittable {
   struct CUSTOM_Hittable *next, *prev;
   short type;
 } CUSTOM_Hittable;
+
+typedef struct CUSTOM_BvhNode {
+  struct CUSTOM_Hittable *next, *prev;
+  short type;
+
+  struct CUSTOM_Hittable *left, *right;
+  CUSTOM_AABB box;
+} CUSTOM_BvhNode;
+
 typedef struct CUSTOM_Sphere {
   struct CUSTOM_Hittable *next, *prev;
   short type;
@@ -138,11 +152,10 @@ typedef struct CUSTOM_Box {
   short type;
 
   CUSTOM_Vector pos_min, pos_max;
-  //CUSTOM_RectXY *up, *down;
-  //CUSTOM_RectXZ *right, *left;
-  //CUSTOM_RectYZ *front, *back;
+  // CUSTOM_RectXY *up, *down;
+  // CUSTOM_RectXZ *right, *left;
+  // CUSTOM_RectYZ *front, *back;
   ListBase faces;
-
 } CUSTOM_Box;
 typedef struct CUSTOM_Triangle {
   struct CUSTOM_Hittable *next, *prev;
@@ -153,7 +166,6 @@ typedef struct CUSTOM_Triangle {
   CUSTOM_Vector n0, n1, n2;
   CUSTOM_Vector uv0, uv1, uv2;
 } CUSTOM_Triangle;
-
 
 typedef struct CUSTOM_HitRecord {
   float t;
@@ -190,7 +202,9 @@ CUSTOM_Camera *CUSTOM_CameraCreate(const float lookfrom[3],
                                    const float focus_dist);
 CUSTOM_Ray CUSTOM_CameraGetRay(const CUSTOM_Camera *cam, float s, float t);
 
-CUSTOM_Sphere *CUSTOM_SphereCreate(const float center[3], float r, const CUSTOM_Material *material);
+CUSTOM_Sphere *CUSTOM_SphereCreate(const float center[3],
+                                   float r,
+                                   const CUSTOM_Material *material);
 CUSTOM_RectXY *CUSTOM_RectXYCreate(
     float x0, float x1, float y0, float y1, float k, const CUSTOM_Material *mat, bool flip_normal);
 CUSTOM_RectXZ *CUSTOM_RectXZCreate(
@@ -200,26 +214,53 @@ CUSTOM_RectYZ *CUSTOM_RectYZCreate(
 CUSTOM_Box *CUSTOM_BoxCreate(const float p_min[3],
                              const float p_max[3],
                              const CUSTOM_Material *mat);
+CUSTOM_Triangle *CUSTOM_TriangleCreate(const float v0[3],
+                                       const float v1[3],
+                                       const float v2[3],
+                                       const float n0[3],
+                                       const float n1[3],
+                                       const float n2[3],
+                                       const float uv0[3],
+                                       const float uv1[3],
+                                       const float uv2[3],
+                                       const CUSTOM_Material *mat);
+CUSTOM_BvhNode *CUSTOM_BvhNodeCreate(const CUSTOM_Hittable *objects, size_t start, size_t end);
 
 CUSTOM_Material *CUSTOM_LambertianCreate(const float albedo[3], const CUSTOM_Texture *texture);
 CUSTOM_Material *CUSTOM_MetalCreate(const float albedo[3], const float f);
 CUSTOM_Material *CUSTOM_DielectricCreate(const float ri);
 CUSTOM_Material *CUSTOM_DiffuseLightCreate(const CUSTOM_Texture *texture);
 
-bool CUSTOM_Sphere_hit(CUSTOM_HitRecord *rec,
-                       const CUSTOM_Ray *ray,
-                       const CUSTOM_Sphere *sphere,
-                       float t_min,
-                       float t_max);
-bool CUSTOM_RectXY_hit(
+bool CUSTOM_HittableHit(CUSTOM_HitRecord *rec,
+                        const CUSTOM_Ray *ray,
+                        const CUSTOM_Hittable *hittable,
+                        float t0,
+                        float t1);
+bool CUSTOM_SphereHit(CUSTOM_HitRecord *rec,
+                      const CUSTOM_Ray *ray,
+                      const CUSTOM_Sphere *sphere,
+                      float t_min,
+                      float t_max);
+bool CUSTOM_RectXYHit(
     CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_RectXY *rect, float t0, float t1);
-bool CUSTOM_RectXZ_hit(
+bool CUSTOM_RectXZHit(
     CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_RectXZ *rect, float t0, float t1);
-bool CUSTOM_RectYZ_hit(
+bool CUSTOM_RectYZHit(
     CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_RectYZ *rect, float t0, float t1);
-bool CUSTOM_Box_hit(
+bool CUSTOM_BoxHit(
     CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_Box *box, float t0, float t1);
+bool CUSTOM_TriangleHit(
+    CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_Triangle *tri, float t0, float t1);
+bool CUSTOM_BvhNodeHit(CUSTOM_HitRecord *rec,
+                       const CUSTOM_Ray *ray,
+                       const CUSTOM_BvhNode *node,
+                       double t_min,
+                       double t_max);
 
+bool CUSTOM_HittableBoundingBox(CUSTOM_AABB *output_box, const CUSTOM_Hittable *hittable);
+bool CUSTOM_SphereBoundingBox(CUSTOM_AABB *output_box, const CUSTOM_Sphere *sphere);
+bool CUSTOM_BoxBoundingBox(CUSTOM_AABB *output_box, const CUSTOM_Box *box);
+bool CUSTOM_BvhNodeBoundingBox(CUSTOM_AABB *output_box, const CUSTOM_BvhNode *node);
 
 void CUSTOM_ImageCreate(CUSTOM_Vector **image, const int wdt, const int hgt);
 
@@ -248,7 +289,6 @@ CUSTOM_Texture *CUSTOM_ConstantTextureCreate(const float color[3]);
 CUSTOM_Texture *CUSTOM_CheckerTextureCreate(const CUSTOM_Texture *odd, const CUSTOM_Texture *even);
 CUSTOM_Texture *CUSTOM_ImageTextureCreate(const float *rgba, int w, int h);
 
-
 CUSTOM_Vector CUSTOM_ConstantTextureValue(const CUSTOM_ConstantTexture *texture);
 CUSTOM_Vector CUSTOM_CheckerTextureValue(const CUSTOM_CheckerTexture *texture,
                                          float u,
@@ -262,4 +302,24 @@ CUSTOM_Vector CUSTOM_ImageTextureValue(const CUSTOM_ImageTexture *texture,
 inline float randomFloat()
 {
   return rand() / (RAND_MAX + 1.0);
+}
+inline int randomInt(int min, int max)
+{
+  return min + rand() % (max - min + 1);
+}
+inline int boxCompare(const CUSTOM_Hittable *a, const CUSTOM_Hittable *b, int axis)
+{
+  CUSTOM_AABB box_a;
+  CUSTOM_AABB box_b;
+
+  // if (!a->bounding_box(0, 0, box_a) || !b->bounding_box(0, 0, box_b)) {
+  if (!CUSTOM_HittableBoundingBox(&box_a, a, 0.0, 0.0) ||
+      !CUSTOM_HittableBoundingBox(&box_b, b, 0.0, 0.0)) {
+    puts("No bounding box in bvh_node constructor.");
+  }
+
+  // return box_a.min().e[axis] < box_b.min().e[axis];
+  //return box_a.min.vec3[axis] < box_b.min.vec3[axis];
+  //return box_a.min.vec3[axis] - box_b.min.vec3[axis];
+  return box_a.min.vec3[axis] < box_b.min.vec3[axis] ? -1 : 1;
 }

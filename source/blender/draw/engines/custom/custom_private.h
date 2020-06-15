@@ -34,6 +34,7 @@ typedef struct CUSTOM_PrivateData {
 
   
   ListBase world;
+  ListBase bvh_nodes;
   CUSTOM_Camera *camera;
 } CUSTOM_PrivateData;
 

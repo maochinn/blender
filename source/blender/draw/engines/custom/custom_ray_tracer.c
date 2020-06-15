@@ -70,38 +70,45 @@ CUSTOM_Vector pointAtParameter(const CUSTOM_Ray *ray, float t)
  *  rec:    pointer of CUSTOM_HitRecord*
  */
 
-bool Hittable_hit(CUSTOM_HitRecord *rec,
+bool CUSTOM_HittableHit(CUSTOM_HitRecord *rec,
                   const CUSTOM_Ray *ray,
                   const CUSTOM_Hittable *hittable,
                   float t0,
                   float t1)
 {
   if (hittable->type == CUSTOM_SPHERE) {
-    if (CUSTOM_Sphere_hit(rec, ray, (CUSTOM_Sphere *)hittable, t0, t1)) {
-      return true;
-    }
+    return CUSTOM_SphereHit(rec, ray, (CUSTOM_Sphere *)hittable, t0, t1);
   }
   else if (hittable->type == CUSTOM_RECT_XY) {
-    if (CUSTOM_RectXY_hit(rec, ray, (CUSTOM_RectXY *)hittable, t0, t1)) {
-      return true;
-    }
+    return CUSTOM_RectXYHit(rec, ray, (CUSTOM_RectXY *)hittable, t0, t1);
   }
   else if (hittable->type == CUSTOM_RECT_XZ) {
-    if (CUSTOM_RectXZ_hit(rec, ray, (CUSTOM_RectXZ *)hittable, t0, t1)) {
-      return true;
-    }
+    return CUSTOM_RectXZHit(rec, ray, (CUSTOM_RectXZ *)hittable, t0, t1);
   }
   else if (hittable->type == CUSTOM_RECT_YZ) {
-    if (CUSTOM_RectYZ_hit(rec, ray, (CUSTOM_RectYZ *)hittable, t0, t1)) {
-      return true;
-    }
+    return CUSTOM_RectYZHit(rec, ray, (CUSTOM_RectYZ *)hittable, t0, t1);
   }
   else if (hittable->type == CUSTOM_BOX) {
-    if (CUSTOM_Box_hit(rec, ray, (CUSTOM_Box *)hittable, t0, t1)) {
-      return true;
-    }
+    return CUSTOM_BoxHit(rec, ray, (CUSTOM_Box *)hittable, t0, t1);
+  }
+  else if (hittable->type == CUSTOM_BVH_NODE) {
+    return CUSTOM_BvhNodeHit(rec, ray, (CUSTOM_BvhNode *)hittable, t0, t1);
   }
 
+  return false;
+}
+
+bool CUSTOM_HittableBoundingBox(CUSTOM_AABB *output_box, const CUSTOM_Hittable *hittable)
+{
+  if (hittable->type == CUSTOM_SPHERE) {
+    return CUSTOM_SphereBoundingBox(output_box, (CUSTOM_Sphere *)hittable);
+  }
+  else if (hittable->type == CUSTOM_BOX) {
+    return CUSTOM_BoxBoundingBox(output_box, (CUSTOM_Box *)hittable);
+  }
+  else if (hittable->type == CUSTOM_BVH_NODE) {
+    return CUSTOM_BvhNodeBoundingBox(output_box, (CUSTOM_BvhNode *)hittable);
+  }
   return false;
 }
 
@@ -124,12 +131,10 @@ CUSTOM_Vector randomInUnitSphere(void)
 /**/
 CUSTOM_Vector randomInUnitHemisphere(const CUSTOM_Vector *dir)
 {
-  CUSTOM_Vector p;
-  do {
-    // p = 2.0 * vec3(random_float(), random_float(), random_float()) - vec3(1, 1, 1);
-    mul_v3_v3fl(p.vec3, (float[3]){randomFloat(), randomFloat(), randomFloat()}, 2.0f);
-    sub_v3_v3(p.vec3, (float[3]){1.0f, 1.0f, 1.0f});
-  } while (dot_v3v3(p.vec3, dir->vec3) < 0.0f);
+  CUSTOM_Vector p = randomInUnitSphere();
+  if (dot_v3v3(p.vec3, dir->vec3) < 0.0f) {
+    negate_v3(p.vec3);
+  }
   return p;
 }
 
@@ -163,7 +168,7 @@ bool list_hit(
   double closest_so_far = t_max;
   for (CUSTOM_Hittable *hittable = (CUSTOM_Hittable *)list->first; hittable;
        hittable = hittable->next) {
-    if (Hittable_hit(&temp_rec, ray, hittable, t_min, closest_so_far)) {
+    if (CUSTOM_HittableHit(&temp_rec, ray, hittable, t_min, closest_so_far)) {
       hit_anything = true;
       closest_so_far = temp_rec.t;
       *rec = temp_rec;
@@ -171,6 +176,90 @@ bool list_hit(
   }
   return hit_anything;
 }
+
+CUSTOM_AABB surroundingBox(const CUSTOM_AABB *box0, const CUSTOM_AABB *box1)
+{
+  // point3 small(fmin(box0.min().x(), box1.min().x()),
+  //             fmin(box0.min().y(), box1.min().y()),
+  //             fmin(box0.min().z(), box1.min().z()));
+
+  // point3 big(fmax(box0.max().x(), box1.max().x()),
+  //           fmax(box0.max().y(), box1.max().y()),
+  //           fmax(box0.max().z(), box1.max().z()));
+
+  CUSTOM_Vector small = {fmin(box0->min.x, box1->min.x),
+                         fmin(box0->min.y, box1->min.y),
+                         fmin(box0->min.z, box1->min.z)};
+  CUSTOM_Vector big = {fmax(box0->max.x, box1->max.x),
+                       fmax(box0->max.y, box1->max.y),
+                       fmax(box0->max.z, box1->max.z)};
+
+  return (CUSTOM_AABB){small, big};
+}
+bool list_boundingBox(CUSTOM_AABB *output_box, const ListBase *list, float t_min, float t_max)
+{
+  if (BLI_listbase_is_empty(list))
+    return false;
+
+  CUSTOM_AABB temp_box;
+  bool first_box = true;
+
+  for (CUSTOM_Hittable *hittable = (CUSTOM_Hittable *)list->first; hittable;
+       hittable = hittable->next) {
+    if (!CUSTOM_HittableBoundingBox(&temp_box, hittable, t_min, t_max)) {
+      return false;
+    }
+    *output_box = first_box ? temp_box : (surroundingBox(output_box, &temp_box));
+    first_box = false;
+  }
+  return true;
+}
+
+bool AABB_hit(const CUSTOM_AABB *aabb, const CUSTOM_Ray *ray, float t_min, float t_max)
+{
+  for (int a = 0; a < 3; a++) {
+    // float t0 = fmin((aabb->min.vec3[a] - ray->origin.vec3[a]) / ray->direction.vec3[a],
+    //          (aabb->max.vec3[a] - ray->origin.vec3[a]) / ray->direction.vec3[a]);
+    // float t1 = fmax((aabb->min.vec3[a] - ray->origin.vec3[a]) / ray->direction.vec3[a],
+    //          (aabb->max.vec3[a] - ray->origin.vec3[a]) / ray->direction.vec3[a]);
+
+    // t_min = fmax(t0, t_min);
+    // t_max = fmin(t1, t_max);
+
+    float invD = 1.0f / ray->direction.vec3[a];
+    float t0 = (aabb->min.vec3[a] - ray->origin.vec3[a]) * invD;
+    float t1 = (aabb->max.vec3[a] - ray->origin.vec3[a]) * invD;
+    if (invD < 0.0f) {
+      SWAP(float, t0, t1);
+      //float temp = t0;
+      //t0 = t1;
+      //t1 = temp;
+    };
+    t_min = t0 > t_min ? t0 : t_min;
+    t_max = t1 < t_max ? t1 : t_max;
+
+    if (t_max <= t_min)
+      return false;
+  }
+  return true;
+}
+
+
+int boxCompareX(const void *a, const void *b)
+{
+  return boxCompare(*(CUSTOM_Hittable **)a, *(CUSTOM_Hittable **)b, 0);
+}
+
+int boxCompareY(const void *a, const void *b)
+{
+  return boxCompare(*(CUSTOM_Hittable **)a, *(CUSTOM_Hittable **)b, 1);
+}
+
+int boxCompareZ(const void *a, const void *b)
+{
+  return boxCompare(*(CUSTOM_Hittable **)a, *(CUSTOM_Hittable **)b, 2);
+}
+
 CUSTOM_Vector textureValue(const CUSTOM_Texture *texture,
                            float u,
                            float v,
@@ -213,11 +302,13 @@ CUSTOM_Vector materialEmitted(float u, float v, const CUSTOM_Vector *p, const CU
     return CUSTOM_DiffuseLightEmitted(u, v, p, (CUSTOM_DiffuseLight *)mat);
 }
 
-bool CUSTOM_Sphere_hit(CUSTOM_HitRecord *rec,
-                       const CUSTOM_Ray *ray,
-                       const CUSTOM_Sphere *sphere,
-                       float t_min,
-                       float t_max)
+/**/
+
+bool CUSTOM_SphereHit(CUSTOM_HitRecord *rec,
+                      const CUSTOM_Ray *ray,
+                      const CUSTOM_Sphere *sphere,
+                      float t_min,
+                      float t_max)
 {
   float co[3];  // sphere's center to ray's origin
   sub_v3_v3v3(co, ray->origin.vec3, sphere->center.vec3);
@@ -254,7 +345,7 @@ bool CUSTOM_Sphere_hit(CUSTOM_HitRecord *rec,
   }
   return false;
 }
-bool CUSTOM_RectXY_hit(
+bool CUSTOM_RectXYHit(
     CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_RectXY *rect, float t0, float t1)
 {
   float t = (rect->k - ray->origin.z) / ray->direction.z;
@@ -272,7 +363,7 @@ bool CUSTOM_RectXY_hit(
   rec->normal = rect->normal;
   return true;
 }
-bool CUSTOM_RectXZ_hit(
+bool CUSTOM_RectXZHit(
     CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_RectXZ *rect, float t0, float t1)
 {
   float t = (rect->k - ray->origin.y) / ray->direction.y;
@@ -290,7 +381,7 @@ bool CUSTOM_RectXZ_hit(
   rec->normal = rect->normal;
   return true;
 }
-bool CUSTOM_RectYZ_hit(
+bool CUSTOM_RectYZHit(
     CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_RectYZ *rect, float t0, float t1)
 {
   float t = (rect->k - ray->origin.x) / ray->direction.x;
@@ -308,8 +399,7 @@ bool CUSTOM_RectYZ_hit(
   rec->normal = rect->normal;
   return true;
 }
-
-bool CUSTOM_Box_hit(
+bool CUSTOM_BoxHit(
     CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_Box *box, float t0, float t1)
 {
   if (list_hit(rec, ray, &box->faces, t0, t1))
@@ -318,8 +408,7 @@ bool CUSTOM_Box_hit(
     return false;
   // return list_hit(rec, ray, &box->faces, t0, t1);
 }
-
-bool CUSTOM_Triangle_hit(
+bool CUSTOM_TriangleHit(
     CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_Triangle *tri, float t0, float t1)
 {
   // compute plane's normal
@@ -332,44 +421,43 @@ bool CUSTOM_Triangle_hit(
   // Vec3f N = v0v1.crossProduct(v0v2);  // N
   float N[3];
   cross_v3_v3v3(N, v0v1, v0v2);
-  //float area2 = N.length();
+  // float area2 = N.length();
   float area2 = len_v3(N);
 
   // Step 1: finding P
 
   // check if ray and plane are parallel ?
-  //float NdotRayDirection = N.dotProduct(dir);
+  // float NdotRayDirection = N.dotProduct(dir);
   float N_dot_raydir = dot_v3v3(N, ray->direction.vec3);
   if (fabs(N_dot_raydir) < 0.01f)  // almost 0
-    return false;                         // they are parallel so they don't intersect !
+    return false;                  // they are parallel so they don't intersect !
 
   // compute d parameter using equation 2
-  //float d = N.dotProduct(v0);
+  // float d = N.dotProduct(v0);
   float d = dot_v3v3(N, tri->v0.vec3);
 
   // compute t (equation 3)
-  //t = (N.dotProduct(orig) + d) / NdotRayDirection;
+  // t = (N.dotProduct(orig) + d) / NdotRayDirection;
   float t = (dot_v3v3(N, ray->origin.vec3) + d) / N_dot_raydir;
   // check if the triangle is in behind the ray
   if (t < 0)
     return false;  // the triangle is behind
 
   // compute the intersection point using equation 1
-  //Vec3f P = orig + t * dir;
-  //float P[3];
-  //madd_v3_v3v3fl(P, ray->origin.vec3, ray->direction.vec3, t);
+  // Vec3f P = orig + t * dir;
+  // float P[3];
+  // madd_v3_v3v3fl(P, ray->origin.vec3, ray->direction.vec3, t);
   CUSTOM_Vector P = pointAtParameter(ray, t);
-  
 
   // Step 2: inside-outside test
-  //Vec3f C;  // vector perpendicular to triangle's plane
+  // Vec3f C;  // vector perpendicular to triangle's plane
   float C[3];
 
   // edge 0
-  //Vec3f edge0 = v1 - v0;
-  //Vec3f vp0 = P - v0;
-  //C = edge0.crossProduct(vp0);
-  //if (N.dotProduct(C) < 0)
+  // Vec3f edge0 = v1 - v0;
+  // Vec3f vp0 = P - v0;
+  // C = edge0.crossProduct(vp0);
+  // if (N.dotProduct(C) < 0)
   //  return false;  // P is on the right side
   float edge0[3], vp0[3];
   sub_v3_v3v3(edge0, tri->v1.vec3, tri->v0.vec3);
@@ -379,10 +467,10 @@ bool CUSTOM_Triangle_hit(
     return false;
 
   // edge 1
-  //Vec3f edge1 = v2 - v1;
-  //Vec3f vp1 = P - v1;
-  //C = edge1.crossProduct(vp1);
-  //if (N.dotProduct(C) < 0)
+  // Vec3f edge1 = v2 - v1;
+  // Vec3f vp1 = P - v1;
+  // C = edge1.crossProduct(vp1);
+  // if (N.dotProduct(C) < 0)
   //  return false;  // P is on the right side
   float edge1[3], vp1[3];
   sub_v3_v3v3(edge1, tri->v2.vec3, tri->v1.vec3);
@@ -392,10 +480,10 @@ bool CUSTOM_Triangle_hit(
     return false;
 
   // edge 2
-  //Vec3f edge2 = v0 - v2;
-  //Vec3f vp2 = P - v2;
-  //C = edge2.crossProduct(vp2);
-  //if (N.dotProduct(C) < 0)
+  // Vec3f edge2 = v0 - v2;
+  // Vec3f vp2 = P - v2;
+  // C = edge2.crossProduct(vp2);
+  // if (N.dotProduct(C) < 0)
   //  return false;  // P is on the right side;
   float edge2[3], vp2[3];
   sub_v3_v3v3(edge2, tri->v0.vec3, tri->v2.vec3);
@@ -423,6 +511,20 @@ bool CUSTOM_Triangle_hit(
   rec->normal = (CUSTOM_Vector){normal[0], normal[1], normal[2]};
 
   return true;  // this ray hits the triangle
+}
+bool CUSTOM_BvhNodeHit(CUSTOM_HitRecord *rec,
+                       const CUSTOM_Ray *ray,
+                       const CUSTOM_BvhNode *node,
+                       double t_min,
+                       double t_max)
+{
+  if (!AABB_hit(&node->box, ray, t_min, t_max))
+    return false;
+
+  bool hit_left = CUSTOM_HittableHit(rec, ray, node->left, t_min, t_max);
+  bool hit_right = CUSTOM_HittableHit(rec, ray, node->right, t_min, hit_left ? rec->t : t_max);
+
+  return hit_left || hit_right;
 }
 
 /******************************************************************
@@ -698,6 +800,71 @@ CUSTOM_Triangle *CUSTOM_TriangleCreate(const float v0[3],
   tri->mat_ptr = mat;
 
   return tri;
+}
+
+CUSTOM_BvhNode *CUSTOM_BvhNodeCreate(const CUSTOM_Hittable **objects, size_t start, size_t end)
+{
+  CUSTOM_BvhNode *node = (CUSTOM_BvhNode *)MEM_callocN(sizeof(CUSTOM_BvhNode), "CUSTOM_BvhNode");
+
+  int axis = randomInt(0, 2);
+  int (*comparator)(const void *, const void *) = (axis == 0) ?
+                                                      boxCompareX :
+                                                      (axis == 1) ? boxCompareY : boxCompareZ;
+
+  //int amount = BLI_listbase_count(objects);
+  size_t object_span = end - start;
+
+  if (object_span == 1) {
+    node->left = node->right = objects[start];
+  }
+  else if (object_span == 2) {
+    if (comparator(&objects[start], &objects[start + 1]) < 0) {
+      node->left = objects[start];
+      node->right = objects[start + 1];
+    }
+    else {
+      node->left = objects[start + 1];
+      node->right = objects[start];
+    }
+  }
+  else {
+    //BLI_listbase_sort(objects, comparator);
+    qsort(objects, end - start, sizeof(CUSTOM_Hittable*), comparator);
+
+    int mid = start + object_span / 2;
+
+    node->left = (CUSTOM_Hittable *)CUSTOM_BvhNodeCreate(objects, start, mid);
+    node->right = (CUSTOM_Hittable *)CUSTOM_BvhNodeCreate(objects, mid, end);
+    //ListBase left_list = {NULL, NULL};
+    //ListBase right_list = {NULL, NULL};
+    //CUSTOM_Hittable *hittable = (CUSTOM_Hittable *)objects->first;
+    //for (int i = 0; hittable; hittable = hittable->next, i++) {
+    //  if (i < mid) {
+    //    BLI_addtail(&left_list, hittable);
+    //  }
+    //  else {
+    //    BLI_addtail(&right_list, hittable);
+    //  }
+    //}
+    // left = make_shared<bvh_node>(objects, start, mid, time0, time1);
+    // right = make_shared<bvh_node>(objects, mid, end, time0, time1);
+    //node->left = (CUSTOM_Hittable*)CUSTOM_BvhNodeCreate(&left_list);
+    //node->right = (CUSTOM_Hittable *)CUSTOM_BvhNodeCreate(&right_list);
+  }
+
+  CUSTOM_AABB box_left, box_right;
+
+  // if (!left->bounding_box(time0, time1, box_left) || !right->bounding_box(time0, time1,
+  // box_right))
+  //  std::cerr << "No bounding box in bvh_node constructor.\n";
+  if (!CUSTOM_HittableBoundingBox(&box_left, node->left) ||
+      !CUSTOM_HittableBoundingBox(&box_right, node->right)) {
+    puts("No bounding box in bvh_node constructor.");
+  }
+
+  node->box = surroundingBox(&box_left, &box_right);
+  node->type = CUSTOM_BVH_NODE;
+  return node;
 }
 
 /******************************************************************
@@ -980,4 +1147,27 @@ CUSTOM_Vector CUSTOM_ImageTextureValue(const CUSTOM_ImageTexture *texture,
   float g = texture->img[i + w * j].g;
   float b = texture->img[i + w * j].b;
   return (CUSTOM_Vector){r, g, b};
+}
+
+bool CUSTOM_BoxBoundingBox(CUSTOM_AABB *output_box, const CUSTOM_Box *box)
+{
+  output_box->min = box->pos_min;
+  output_box->max = box->pos_max;
+  return true;
+}
+bool CUSTOM_SphereBoundingBox(CUSTOM_AABB *output_box, const CUSTOM_Sphere *sphere)
+{
+  sub_v3_v3v3(output_box->min.vec3,
+              sphere->center.vec3,
+              (float[3]){sphere->radius, sphere->radius, sphere->radius});
+  add_v3_v3v3(output_box->max.vec3,
+              sphere->center.vec3,
+              (float[3]){sphere->radius, sphere->radius, sphere->radius});
+
+  return true;
+}
+bool CUSTOM_BvhNodeBoundingBox(CUSTOM_AABB *output_box, const CUSTOM_BvhNode *node)
+{
+  *output_box = node->box;
+  return true;
 }
