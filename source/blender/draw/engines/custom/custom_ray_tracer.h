@@ -224,7 +224,7 @@ CUSTOM_Triangle *CUSTOM_TriangleCreate(const float v0[3],
                                        const float uv1[3],
                                        const float uv2[3],
                                        const CUSTOM_Material *mat);
-CUSTOM_BvhNode *CUSTOM_BvhNodeCreate(const CUSTOM_Hittable *objects, size_t start, size_t end);
+CUSTOM_BvhNode *CUSTOM_BvhNodeCreate(const CUSTOM_Hittable **objects, size_t start, size_t end);
 
 CUSTOM_Material *CUSTOM_LambertianCreate(const float albedo[3], const CUSTOM_Texture *texture);
 CUSTOM_Material *CUSTOM_MetalCreate(const float albedo[3], const float f);
@@ -260,6 +260,7 @@ bool CUSTOM_BvhNodeHit(CUSTOM_HitRecord *rec,
 bool CUSTOM_HittableBoundingBox(CUSTOM_AABB *output_box, const CUSTOM_Hittable *hittable);
 bool CUSTOM_SphereBoundingBox(CUSTOM_AABB *output_box, const CUSTOM_Sphere *sphere);
 bool CUSTOM_BoxBoundingBox(CUSTOM_AABB *output_box, const CUSTOM_Box *box);
+bool CUSTOM_TriangleBoundingBox(CUSTOM_AABB *output_box, const CUSTOM_Triangle *tri);
 bool CUSTOM_BvhNodeBoundingBox(CUSTOM_AABB *output_box, const CUSTOM_BvhNode *node);
 
 void CUSTOM_ImageCreate(CUSTOM_Vector **image, const int wdt, const int hgt);
@@ -312,14 +313,10 @@ inline int boxCompare(const CUSTOM_Hittable *a, const CUSTOM_Hittable *b, int ax
   CUSTOM_AABB box_a;
   CUSTOM_AABB box_b;
 
-  // if (!a->bounding_box(0, 0, box_a) || !b->bounding_box(0, 0, box_b)) {
   if (!CUSTOM_HittableBoundingBox(&box_a, a, 0.0, 0.0) ||
       !CUSTOM_HittableBoundingBox(&box_b, b, 0.0, 0.0)) {
     puts("No bounding box in bvh_node constructor.");
   }
 
-  // return box_a.min().e[axis] < box_b.min().e[axis];
-  //return box_a.min.vec3[axis] < box_b.min.vec3[axis];
-  //return box_a.min.vec3[axis] - box_b.min.vec3[axis];
   return box_a.min.vec3[axis] < box_b.min.vec3[axis] ? -1 : 1;
 }

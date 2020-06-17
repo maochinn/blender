@@ -41,7 +41,6 @@ static void custom_engine_init(void *vedata)
     stl->pd = MEM_callocN(sizeof(*stl->pd), __func__);
   }
 
-
   if (vldata->custom_ubo == NULL) {
     vldata->custom_ubo = DRW_uniformbuffer_create(sizeof(vldata->custom_data),
                                                   &vldata->custom_data);
@@ -96,9 +95,11 @@ static void custom_cache_populate(void *vedata, Object *ob)
     const Mesh *mesh = ob->data;
 
     const CUSTOM_Material *material = CUSTOM_LambertianCreate(
-        (float[3]){0.5f, 0.5f, 0.5f}, CUSTOM_ConstantTextureCreate((float[3]){0.5f, 0.5f, 0.5f}));
+        (float[3]){1.0f, 0.0f, 0.0f}, CUSTOM_ConstantTextureCreate((float[3]){0.5f, 0.5f, 0.5f}));
+    // const CUSTOM_Material *material = CUSTOM_DiffuseLightCreate(
+    //    CUSTOM_ConstantTextureCreate((float[3]){0.0f, 0.0f, 4.0f}));
 
-    if (mesh->mat[0] && mesh->mat[0]->use_nodes) {
+    if (mesh->mat && mesh->mat[0]->use_nodes) {
       const ListBase nodes = mesh->mat[0]->nodetree->nodes;
       for (const bNode *node = nodes.first; node; node = node->next) {
         if (node->type == SH_NODE_TEX_IMAGE) {
@@ -151,51 +152,133 @@ static void custom_cache_populate(void *vedata, Object *ob)
         }
       }
     }
+
     if (strncmp("OBSphere", ob->id.name, 8) == 0) {
       BLI_addtail(
           &pd->bvh_nodes,
           CUSTOM_SphereCreate((float[3]){loc[0], loc[1], loc[2]}, 0.5f * ob->scale[0], material));
     }
-    else if (strncmp("OBCube", ob->id.name, 6) == 0) {
-      float min[3], max[3];
-      madd_v3_v3v3v3(min, loc, (float[3]){-0.5f, -0.5f, -0.5f}, ob->scale);
-      madd_v3_v3v3v3(max, loc, (float[3]){0.5f, 0.5f, 0.5f}, ob->scale);
-      BLI_addtail(&pd->bvh_nodes, CUSTOM_BoxCreate(min, max, material));
-    }
-    else if (strncmp("OBPlane", ob->id.name, 7) == 0) {
-      float dimension[3];
-      BKE_object_dimensions_get(ob, dimension);
-      const MPoly *mpoly = mesh->mpoly;
-      float normal[3];
+    /* else if (strncmp("OBCube", ob->id.name, 6) == 0) {
+       float min[3], max[3];
+       madd_v3_v3v3v3(min, loc, (float[3]){-0.5f, -0.5f, -0.5f}, ob->scale);
+       madd_v3_v3v3v3(max, loc, (float[3]){0.5f, 0.5f, 0.5f}, ob->scale);
+       BLI_addtail(&pd->bvh_nodes, CUSTOM_BoxCreate(min, max, material));
+     }*/
+    /* else if (strncmp("OBPlane", ob->id.name, 7) == 0) {
+       float dimension[3];
+       BKE_object_dimensions_get(ob, dimension);
+       const MPoly *mpoly = mesh->mpoly;
+       float normal[3];
 
-      BKE_mesh_calc_poly_normal(mpoly, mesh->mloop + mpoly->loopstart, mesh->mvert, normal);
-      if (dimension[0] <= 0.001f)
-        BLI_addtail(&pd->world,
-                    CUSTOM_RectYZCreate(loc[1] - 0.5f * ob->scale[1],
-                                        loc[1] + 0.5f * ob->scale[1],
-                                        loc[2] - 0.5f * ob->scale[2],
-                                        loc[2] + 0.5f * ob->scale[2],
-                                        loc[0],
-                                        material,
-                                        normal[0] < 0.0f ? true : false));
-      else if (dimension[1] <= 0.001f)
-        BLI_addtail(&pd->world,
-                    CUSTOM_RectXZCreate(loc[0] - 0.5f * ob->scale[0],
-                                        loc[0] + 0.5f * ob->scale[0],
-                                        loc[2] - 0.5f * ob->scale[2],
-                                        loc[2] + 0.5f * ob->scale[2],
-                                        loc[1],
-                                        material,
-                                        normal[1] < 0.0f ? true : false));
-      else if (dimension[2] <= 0.001f)
-        BLI_addtail(&pd->world,
-                    CUSTOM_RectXYCreate(loc[0] - 0.5f * ob->scale[0],
-                                        loc[0] + 0.5f * ob->scale[0],
-                                        loc[1] - 0.5f * ob->scale[1],
-                                        loc[1] + 0.5f * ob->scale[1],
-                                        loc[2],
-                                        material,
-                                        normal[2] < 0.0f ? true : false));
+       BKE_mesh_calc_poly_normal(mpoly, mesh->mloop + mpoly->loopstart, mesh->mvert, normal);
+       if (dimension[0] <= 0.001f)
+         BLI_addtail(&pd->world,
+                     CUSTOM_RectYZCreate(loc[1] - 0.5f * ob->scale[1],
+                                         loc[1] + 0.5f * ob->scale[1],
+                                         loc[2] - 0.5f * ob->scale[2],
+                                         loc[2] + 0.5f * ob->scale[2],
+                                         loc[0],
+                                         material,
+                                         normal[0] < 0.0f ? true : false));
+       else if (dimension[1] <= 0.001f)
+         BLI_addtail(&pd->world,
+                     CUSTOM_RectXZCreate(loc[0] - 0.5f * ob->scale[0],
+                                         loc[0] + 0.5f * ob->scale[0],
+                                         loc[2] - 0.5f * ob->scale[2],
+                                         loc[2] + 0.5f * ob->scale[2],
+                                         loc[1],
+                                         material,
+                                         normal[1] < 0.0f ? true : false));
+       else if (dimension[2] <= 0.001f)
+         BLI_addtail(&pd->world,
+                     CUSTOM_RectXYCreate(loc[0] - 0.5f * ob->scale[0],
+                                         loc[0] + 0.5f * ob->scale[0],
+                                         loc[1] - 0.5f * ob->scale[1],
+                                         loc[1] + 0.5f * ob->scale[1],
+                                         loc[2],
+                                         material,
+                                         normal[2] < 0.0f ? true : false));
+     }*/
+    else {
+      const MVert *mverts = mesh->mvert;
+      const MPoly *mpolys = mesh->mpoly;
+      const MLoop *mloops = mesh->mloop;
+
+      // float **world_matrix = ob->obmat;
+      for (int i = 0; i < mesh->totpoly; i++) {
+        // must is a triangle
+        BLI_assert(mpolys[i].totloop == 3);
+        //if (mpolys[i].totloop != 3) {
+        //  puts("!!!");
+        //}
+
+        const MVert *v0 = &mesh->mvert[mloops[mpolys[i].loopstart + 0].v];
+        const MVert *v1 = &mesh->mvert[mloops[mpolys[i].loopstart + 1].v];
+        const MVert *v2 = &mesh->mvert[mloops[mpolys[i].loopstart + 2].v];
+
+        float p0[3], p1[3], p2[3];
+        mul_v3_m4v3(p0, ob->obmat, v0->co);
+        mul_v3_m4v3(p1, ob->obmat, v1->co);
+        mul_v3_m4v3(p2, ob->obmat, v2->co);
+
+        mul_v3_fl(p0, unit_scale);
+        mul_v3_fl(p1, unit_scale);
+        mul_v3_fl(p2, unit_scale);
+
+        float n0[3], n1[3], n2[3];
+        normal_short_to_float_v3(n0, v0->no);
+        normal_short_to_float_v3(n1, v1->no);
+        normal_short_to_float_v3(n2, v2->no);
+
+        float normal[3];
+        BKE_mesh_calc_poly_normal(
+            &mpolys[i], mesh->mloop + mpolys[i].loopstart, mesh->mvert, normal);
+
+        // p0, p1, p2 must is counter clockwise
+        //float p0p1[3], p0p2[3];
+        //sub_v3_v3v3(p0p1, p1, p0);
+        //sub_v3_v3v3(p0p2, p2, p0);
+        //float p0p1Xp0p2[3];
+        //cross_v3_v3v3(p0p1Xp0p2, p0p1, p0p2);
+
+        //if (dot_v3v3(p0p1Xp0p2, normal) < 0.0) {
+        //  BLI_addtail(&pd->bvh_nodes,
+        //              CUSTOM_TriangleCreate(p2,
+        //                                    p1,
+        //                                    p0,
+        //                                    normal,
+        //                                    normal,
+        //                                    normal,
+        //                                    (float[3]){0.0, 0.0, 0.0},
+        //                                    (float[3]){0.0, 0.0, 0.0},
+        //                                    (float[3]){0.0, 0.0, 0.0},
+        //                                    material));
+        //}
+        //else {
+        //  BLI_addtail(&pd->bvh_nodes,
+        //              CUSTOM_TriangleCreate(p0,
+        //                                    p1,
+        //                                    p2,
+        //                                    normal,
+        //                                    normal,
+        //                                    normal,
+        //                                    (float[3]){0.0, 0.0, 0.0},
+        //                                    (float[3]){0.0, 0.0, 0.0},
+        //                                    (float[3]){0.0, 0.0, 0.0},
+        //                                    material));
+        //}
+         BLI_addtail(&pd->bvh_nodes,
+                    CUSTOM_TriangleCreate(p0,
+                                          p1,
+                                          p2,
+                                          normal,
+                                          normal,
+                                          normal,
+                                          (float[3]){0.0, 0.0, 0.0},
+                                          (float[3]){0.0, 0.0, 0.0},
+                                          (float[3]){0.0, 0.0, 0.0},
+                                          material));
+      }
     }
   }
   else if (ob->type == OB_LAMP) {
@@ -284,13 +367,15 @@ static void custom_draw_scene(void *vedata)
 
   if (!BLI_listbase_is_empty(&pd->bvh_nodes)) {
     int count = BLI_listbase_count(&pd->bvh_nodes);
-    struct CUSTOM_Hittable **nodes = MEM_calloc_arrayN(count, sizeof(CUSTOM_Hittable*), "CUSTOM_Hittable");
+    struct CUSTOM_Hittable **nodes = MEM_calloc_arrayN(
+        count, sizeof(CUSTOM_Hittable *), "CUSTOM_Hittable");
     int i = 0;
     for (CUSTOM_Hittable *hittable = (CUSTOM_Hittable *)pd->bvh_nodes.first; hittable;
          hittable = hittable->next) {
       nodes[i++] = hittable;
     }
     BLI_addtail(&pd->world, CUSTOM_BvhNodeCreate(nodes, 0, count));
+    MEM_SAFE_FREE(nodes);
   }
 
   if (!BLI_listbase_is_empty(&pd->world)) {

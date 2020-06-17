@@ -51,9 +51,9 @@ typedef struct CUSTOM_Data {
 } CUSTOM_Data;
 
 
-void custom_render_update_passes(struct RenderEngine* engine,
-	struct Scene* scene,
-	struct ViewLayer* view_layer);
+void custom_render_update_passes(struct RenderEngine *engine,
+                                 struct Scene *scene,
+                                 struct ViewLayer *view_layer);
 
 GPUShader *CUSTOM_shader(void);
 void CUSTOM_shader_free(void);
