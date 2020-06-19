@@ -9,6 +9,35 @@
 
 /* local function */
 
+/* https://gamedev.stackexchange.com/questions/23743/whats-the-most-efficient-way-to-find-barycentric-coordinates */
+void barycentric(float *u,
+                 float *v,
+                 float *w,
+                 const float p[3],
+                 const float a[3],
+                 const float b[3],
+                 const float c[3])
+{
+  // Compute barycentric coordinates (u, v, w) for
+  // point p with respect to triangle (a, b, c)
+
+  float v0[3], v1[3], v2[3];
+  // Vector v0 = b - a, v1 = c - a, v2 = p - a;
+  sub_v3_v3v3(v0, b, a);
+  sub_v3_v3v3(v1, c, a);
+  sub_v3_v3v3(v2, p, a);
+
+  float d00 = dot_v3v3(v0, v0);
+  float d01 = dot_v3v3(v0, v1);
+  float d11 = dot_v3v3(v1, v1);
+  float d20 = dot_v3v3(v2, v0);
+  float d21 = dot_v3v3(v2, v1);
+  float denom = d00 * d11 - d01 * d01;
+  *v = (d11 * d20 - d01 * d21) / denom;
+  *w = (d00 * d21 - d01 * d20) / denom;
+  *u = 1.0f - *v - *w;
+}
+
 inline float schlick(float cosine, float ref_idx)
 {
   float r0 = (1 - ref_idx) / (1 + ref_idx);
@@ -244,8 +273,8 @@ bool AABB_hit(const CUSTOM_AABB *aabb, const CUSTOM_Ray *ray, float t_min, float
     t_min = t0 > t_min ? t0 : t_min;
     t_max = t1 < t_max ? t1 : t_max;
 
-    //if it is plane, t_max == t_min will wrong
-    //if (t_max <= t_min)
+    // if it is plane, t_max == t_min will wrong
+    // if (t_max <= t_min)
     if (t_max < t_min)
       return false;
   }
@@ -457,15 +486,23 @@ bool CUSTOM_TriangleHit(
   if (t < t0 || t > t1) {
     return false;
   }
-  //outIntersectionPoint = rayOrigin + rayVector * t;
+  // outIntersectionPoint = rayOrigin + rayVector * t;
   CUSTOM_Vector P = pointAtParameter(ray, t);
 
+  /* https://codeplea.com/triangular-interpolation */
   float uv[2];
-  float w[3] = {
-      1.0f / len_v3v3(P.vec3, tri->v0.vec3),
-      1.0f / len_v3v3(P.vec3, tri->v1.vec3),
-      1.0f / len_v3v3(P.vec3, tri->v2.vec3),
-  };
+  //float w[3] = {
+  //    1.0f / len_v3v3(P.vec3, tri->v0.vec3),
+  //    1.0f / len_v3v3(P.vec3, tri->v1.vec3),
+  //    1.0f / len_v3v3(P.vec3, tri->v2.vec3),
+  //};
+  //float w012 = w[0] + w[1] + w[2];
+  //w[0] /= w012;
+  //w[1] /= w012;
+  //w[2] /= w012;
+  float w[3];
+
+  barycentric(&w[0], &w[1], &w[2], P.vec3, tri->v0.vec3, tri->v1.vec3, tri->v2.vec3);
 
   float normal[3];
   interp_v2_v2v2v2(uv, tri->uv0.vec2, tri->uv1.vec2, tri->uv2.vec2, w);
@@ -510,20 +547,20 @@ CUSTOM_Vector CUSTOM_sampleColor(const CUSTOM_Ray *ray, const ListBase *world, i
 {
   CUSTOM_HitRecord rec;
   if (list_hit(&rec, ray, world, 0.01f, FLT_MAX)) {
-    //return (CUSTOM_Vector){1.0f, 0.0f, 0.0f};
-     CUSTOM_Ray scattered;
-     CUSTOM_Vector attenuation;
+    // return (CUSTOM_Vector){1.0f, 0.0f, 0.0f};
+    CUSTOM_Ray scattered;
+    CUSTOM_Vector attenuation;
 
-     CUSTOM_Vector emitted = materialEmitted(rec.u, rec.v, &rec.position, rec.mat_ptr);
+    CUSTOM_Vector emitted = materialEmitted(rec.u, rec.v, &rec.position, rec.mat_ptr);
 
-     if (depth < CUSTOM_RECURSIVE_MAX &&
+    if (depth < CUSTOM_RECURSIVE_MAX &&
         materialScatter(&scattered, &attenuation, ray, &rec, rec.mat_ptr)) {
       CUSTOM_Vector color = CUSTOM_sampleColor(&scattered, world, depth + 1);
       mul_v3_v3(color.vec3, attenuation.vec3);
       add_v3_v3(color.vec3, emitted.vec3);
       return color;
     }
-     else {
+    else {
       return emitted;
     }
   }
@@ -1099,11 +1136,14 @@ CUSTOM_Vector CUSTOM_ImageTextureValue(const CUSTOM_ImageTexture *texture,
   int w = texture->wdt;
   int h = texture->hgt;
 
-  int i = (u)*texture->wdt;
-  int j = (1 - v) * texture->hgt - 0.001;
+  int i = u * w;
+  // int j = (1 - v) * texture->hgt;
+  int j = v * h;
 
-  i = max(0, min(i, w - 1));
-  j = max(0, min(j, h - 1));
+  i = clamp_i(i, 0, w - 1);
+  j = clamp_i(j, 0, h - 1);
+  // i = max(0, min(i, w - 1));
+  // j = max(0, min(j, h - 1));
 
   float r = texture->img[i + w * j].r;
   float g = texture->img[i + w * j].g;

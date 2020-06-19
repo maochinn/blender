@@ -8,6 +8,7 @@
 #include "BKE_mesh.h"
 #include "BKE_node.h"
 #include "BKE_image.h"
+#include "BKE_editmesh.h"
 
 #include "DEG_depsgraph_query.h"
 #include "IMB_imbuf_types.h"
@@ -27,6 +28,85 @@
 ///
 
 #define CUSTOM_ENGINE "PBRT_CUSTOM"
+
+/*local function*/
+CUSTOM_Material *getCUSTOM_MaterialfromNodeTree(struct bNodeTree *nodetree)
+{
+  const bNode *output_node;
+  for (output_node = nodetree->nodes.first;
+       output_node->type != SH_NODE_OUTPUT_MATERIAL && output_node;
+       output_node = output_node->next)
+    ;
+  const bNodeSocket *surface_sock;
+  for (surface_sock = output_node->inputs.first;
+       strcmp("Surface", surface_sock->name) != 0 && surface_sock;
+       surface_sock = surface_sock->next)
+    ;
+
+  bNode *node = surface_sock->link->fromnode;
+  if (node->type == SH_NODE_BSDF_DIFFUSE) {
+    float color[3] = {1.0f, 0.0f, 0.0f};
+    for (const bNodeSocket *iosock = node->inputs.first; iosock; iosock = iosock->next) {
+      if (strcmp("Color", iosock->name) == 0 && iosock->type == SOCK_RGBA) {
+        if (iosock->link && iosock->link->fromnode->type == SH_NODE_TEX_IMAGE) {
+          NodeTexImage *tex = iosock->link->fromnode->storage;
+          Image *ima = (Image *)iosock->link->fromnode->id;
+          ImBuf *ibuf;
+          void *lock;
+          int i, size;
+
+          ibuf = BKE_image_acquire_ibuf(ima, NULL, &lock);
+
+          if (ibuf) {
+            size = ibuf->x * ibuf->y * ibuf->channels;
+            float *pixels = (float *)MEM_callocN(sizeof(float) * size, "float array");
+
+            if (ibuf->rect_float) {
+              memcpy(pixels, ibuf->rect_float, sizeof(float) * size);
+            }
+            else {
+              for (i = 0; i < size; i++) {
+                pixels[i] = ((unsigned char *)ibuf->rect)[i] * (1.0f / 255.0f);
+              }
+            }
+            int w = ibuf->x;
+            int h = ibuf->y;
+            BKE_image_release_ibuf(ima, ibuf, lock);
+            return CUSTOM_LambertianCreate((float[3]){0.5f, 0.5f, 0.5f},
+                                           CUSTOM_ImageTextureCreate(pixels, w, h));
+          }
+        }
+        else {
+          copy_v3_v3(color, ((bNodeSocketValueRGBA *)iosock->default_value)->value);
+        }
+      }
+    }
+    return CUSTOM_LambertianCreate(
+        (float[3]){0.5f, 0.5f, 0.5f},
+        CUSTOM_ConstantTextureCreate((float[3]){color[0], color[1], color[2]}));
+  }
+  else if (node->type == SH_NODE_BSDF_GLOSSY) {
+    float color[3] = {1.0f, 0.0f, 0.0f};
+    float roughness = 0.0f;
+    for (const bNodeSocket *iosock = node->inputs.first; iosock; iosock = iosock->next) {
+      if (strcmp("Color", iosock->name) == 0 && iosock->type == SOCK_RGBA)
+        copy_v3_v3(color, ((bNodeSocketValueRGBA *)iosock->default_value)->value);
+      else if (strcmp("Roughness", iosock->name) == 0 && iosock->type == SOCK_FLOAT)
+        roughness = ((bNodeSocketValueFloat *)iosock->default_value)->value;
+    }
+    return CUSTOM_MetalCreate((float[3]){0.5f, 0.5f, 0.5f}, roughness);
+  }
+  else if (node->type == SH_NODE_BSDF_GLASS) {
+    float IOR = 1.0f;
+    for (const bNodeSocket *iosock = node->inputs.first; iosock; iosock = iosock->next) {
+      if (strcmp("IOR", iosock->name) == 0 && iosock->type == SOCK_FLOAT)
+        IOR = ((bNodeSocketValueFloat *)iosock->default_value)->value;
+    }
+    return CUSTOM_DielectricCreate(IOR);
+  }
+
+  return CUSTOM_LambertianCreate((float[3]){1.0f, 1.0f, 1.0f}, NULL);
+}
 
 static void custom_engine_init(void *vedata)
 {
@@ -54,31 +134,6 @@ static void custom_engine_free(void)
 
 static void custom_cache_init(void *vedata)
 {
-  // CUSTOM_Data *data = vedata;
-  // CUSTOM_PassList *psl = data->psl;
-  // CUSTOM_PrivateData *pd = data->stl->pd;
-  // CUSTOM_ViewLayerData *vldata = CUSTOM_view_layer_data_ensure();
-  // const DRWContextState *draw_ctx = DRW_context_state_get();
-
-  // GPUShader *shader = CUSTOM_shader();
-
-  // DRWState state = DRW_STATE_WRITE_COLOR | DRW_STATE_WRITE_DEPTH | DRW_STATE_DEPTH_LESS_EQUAL |
-  //                 DRW_STATE_STENCIL_EQUAL | DRW_STATE_FIRST_VERTEX_CONVENTION;
-  // DRW_STATE_STENCIL_EQUAL 會執行stencil test
-
-  // DRW_PASS_CREATE(psl->custom_ps, state);
-  // DRWPass *pass = psl->custom_ps;
-
-  // DRWShadingGroup *grp = pd->shgrp = DRW_shgroup_create(shader, pass);
-
-  // DRW_shgroup_uniform_block(grp, "custom_block", vldata->custom_ubo);
-  // DRW_shgroup_uniform_block_persistent(grp, "globalsBlock", G_draw.block_ubo);
-  // DRW_shgroup_uniform_float_copy(grp, "wireStepParam", 1.0f);
-  // DRW_shgroup_uniform_bool_copy(grp, "useColoring", true);
-  // DRW_shgroup_uniform_bool_copy(grp, "isTransform", (G.moving & G_TRANSFORM_OBJ) != 0);
-  // DRW_shgroup_uniform_bool_copy(grp, "isObjectColor", false);
-  // DRW_shgroup_uniform_bool_copy(grp, "isRandomColor", true);
-  // DRW_shgroup_stencil_mask(grp, 0xFF);  // stencil buffer 可寫
 }
 
 static void custom_cache_populate(void *vedata, Object *ob)
@@ -93,191 +148,173 @@ static void custom_cache_populate(void *vedata, Object *ob)
 
   if (ob->type == OB_MESH) {
     const Mesh *mesh = ob->data;
+    // const BMEditMesh *em = BKE_editmesh_from_object(ob);
+    // BMFace *bmface;
+    // BMVert *bmvert;
+    // BMIter fiter;
+    // BMIter viter;
 
-    const CUSTOM_Material *material = CUSTOM_LambertianCreate(
-        (float[3]){1.0f, 0.0f, 0.0f}, CUSTOM_ConstantTextureCreate((float[3]){0.5f, 0.5f, 0.5f}));
-    // const CUSTOM_Material *material = CUSTOM_DiffuseLightCreate(
-    //    CUSTOM_ConstantTextureCreate((float[3]){0.0f, 0.0f, 4.0f}));
+    // if (em) {
+    //  BM_ITER_MESH (bmface, &fiter, em->bm, BM_FACES_OF_MESH) {
+    //    bmface->mat_nr;
+    //    BM_ITER_ELEM (bmvert, &viter, bmface, BM_VERTS_OF_FACE) {
+    //      bmvert->co;
+    //    }
+    //  }
+    //}
 
-    if (mesh->mat && mesh->mat[0]->use_nodes) {
-      const ListBase nodes = mesh->mat[0]->nodetree->nodes;
-      for (const bNode *node = nodes.first; node; node = node->next) {
-        if (node->type == SH_NODE_TEX_IMAGE) {
-          NodeTexImage *tex = node->storage;
-          Image *ima = (Image *)node->id;
-          ImBuf *ibuf;
-          void *lock;
-          int i, size;
+    // const CUSTOM_Material *material = CUSTOM_LambertianCreate(
+    //    (float[3]){1.0f, 0.0f, 0.0f}, CUSTOM_ConstantTextureCreate((float[3]){0.5f, 0.5f,
+    //    0.5f}));
 
-          ibuf = BKE_image_acquire_ibuf(ima, NULL, &lock);
+    // if (mesh->mat && mesh->mat[0] && mesh->mat[0]->use_nodes) {
+    //  const ListBase nodes = mesh->mat[0]->nodetree->nodes;
+    //  for (const bNode *node = nodes.first; node; node = node->next) {
+    //    if (node->type == SH_NODE_TEX_IMAGE) {
+    //      NodeTexImage *tex = node->storage;
+    //      Image *ima = (Image *)node->id;
+    //      ImBuf *ibuf;
+    //      void *lock;
+    //      int i, size;
 
-          if (ibuf) {
-            size = ibuf->x * ibuf->y * ibuf->channels;
-            float *pixels = (float *)MEM_callocN(sizeof(float) * size, "float array");
+    //      ibuf = BKE_image_acquire_ibuf(ima, NULL, &lock);
 
-            if (ibuf->rect_float) {
-              memcpy(pixels, ibuf->rect_float, sizeof(float) * size);
-            }
-            else {
-              for (i = 0; i < size; i++) {
-                pixels[i] = ((unsigned char *)ibuf->rect)[i] * (1.0f / 255.0f);
-              }
-            }
-            material = CUSTOM_LambertianCreate(
-                (float[3]){0.5f, 0.5f, 0.5f}, CUSTOM_ImageTextureCreate(pixels, ibuf->x, ibuf->y));
-          }
+    //      if (ibuf) {
+    //        size = ibuf->x * ibuf->y * ibuf->channels;
+    //        float *pixels = (float *)MEM_callocN(sizeof(float) * size, "float array");
 
-          BKE_image_release_ibuf(ima, ibuf, lock);
-        }
-        else if (node->type == SH_NODE_BSDF_DIFFUSE) {
-          float color[3] = {1.0f, 0.0f, 0.0f};
-          for (const bNodeSocket *iosock = node->inputs.first; iosock; iosock = iosock->next) {
-            if (strcmp("Color", iosock->name) == 0 && iosock->type == SOCK_RGBA)
-              copy_v3_v3(color, ((bNodeSocketValueRGBA *)iosock->default_value)->value);
-          }
-          material = CUSTOM_LambertianCreate(
-              (float[3]){0.5f, 0.5f, 0.5f},
-              CUSTOM_ConstantTextureCreate((float[3]){color[0], color[1], color[2]}));
-        }
-        else if (node->type == SH_NODE_BSDF_GLOSSY) {
-          float color[3] = {1.0f, 0.0f, 0.0f};
-          float roughness = 0.0f;
-          for (const bNodeSocket *iosock = node->inputs.first; iosock; iosock = iosock->next) {
-            if (strcmp("Color", iosock->name) == 0 && iosock->type == SOCK_RGBA)
-              copy_v3_v3(color, ((bNodeSocketValueRGBA *)iosock->default_value)->value);
-            else if (strcmp("Roughness", iosock->name) == 0 && iosock->type == SOCK_FLOAT)
-              roughness = ((bNodeSocketValueFloat *)iosock->default_value)->value;
-          }
-          material = CUSTOM_MetalCreate((float[3]){0.5f, 0.5f, 0.5f}, roughness);
-        }
+    //        if (ibuf->rect_float) {
+    //          memcpy(pixels, ibuf->rect_float, sizeof(float) * size);
+    //        }
+    //        else {
+    //          for (i = 0; i < size; i++) {
+    //            pixels[i] = ((unsigned char *)ibuf->rect)[i] * (1.0f / 255.0f);
+    //          }
+    //        }
+    //        material = CUSTOM_LambertianCreate(
+    //            (float[3]){0.5f, 0.5f, 0.5f}, CUSTOM_ImageTextureCreate(pixels, ibuf->x,
+    //            ibuf->y));
+    //      }
+
+    //      BKE_image_release_ibuf(ima, ibuf, lock);
+    //    }
+    //    else if (node->type == SH_NODE_BSDF_DIFFUSE) {
+    //      float color[3] = {1.0f, 0.0f, 0.0f};
+    //      for (const bNodeSocket *iosock = node->inputs.first; iosock; iosock = iosock->next) {
+    //        if (strcmp("Color", iosock->name) == 0 && iosock->type == SOCK_RGBA)
+    //          copy_v3_v3(color, ((bNodeSocketValueRGBA *)iosock->default_value)->value);
+    //      }
+    //      material = CUSTOM_LambertianCreate(
+    //          (float[3]){0.5f, 0.5f, 0.5f},
+    //          CUSTOM_ConstantTextureCreate((float[3]){color[0], color[1], color[2]}));
+    //    }
+    //    else if (node->type == SH_NODE_BSDF_GLOSSY) {
+    //      float color[3] = {1.0f, 0.0f, 0.0f};
+    //      float roughness = 0.0f;
+    //      for (const bNodeSocket *iosock = node->inputs.first; iosock; iosock = iosock->next) {
+    //        if (strcmp("Color", iosock->name) == 0 && iosock->type == SOCK_RGBA)
+    //          copy_v3_v3(color, ((bNodeSocketValueRGBA *)iosock->default_value)->value);
+    //        else if (strcmp("Roughness", iosock->name) == 0 && iosock->type == SOCK_FLOAT)
+    //          roughness = ((bNodeSocketValueFloat *)iosock->default_value)->value;
+    //      }
+    //      material = CUSTOM_MetalCreate((float[3]){0.5f, 0.5f, 0.5f}, roughness);
+    //    }
+    //    else if (node->type == SH_NODE_BSDF_GLASS) {
+    //      float IOR = 1.0f;
+    //      for (const bNodeSocket *iosock = node->inputs.first; iosock; iosock = iosock->next) {
+    //        if (strcmp("IOR", iosock->name) == 0 && iosock->type == SOCK_FLOAT)
+    //          IOR = ((bNodeSocketValueFloat *)iosock->default_value)->value;
+    //      }
+    //      material = CUSTOM_DielectricCreate(IOR);
+    //    }
+    //    else if (node->type == SH_NODE_OUTPUT_MATERIAL) {
+    //      for (const bNodeSocket *iosock = node->inputs.first; iosock; iosock = iosock->next) {
+    //        iosock->name;
+    //      }
+    //      for (const bNodeSocket *iosock = node->outputs.first; iosock; iosock = iosock->next) {
+    //        iosock->name;
+    //      }
+    //    }
+    //  }
+    //}
+    const CUSTOM_Material *default_material = CUSTOM_LambertianCreate((float[3]){1.0f, 1.0f, 1.0f},
+                                                                      NULL);
+    const CUSTOM_Material *materials[100] = {NULL};
+    if (strncmp("OBSphere", ob->id.name, 8) == 0) {
+      if (mesh->mat && mesh->mat[0] && mesh->mat[0]->use_nodes) {
+        BLI_addtail(&pd->bvh_nodes,
+                    CUSTOM_SphereCreate((float[3]){loc[0], loc[1], loc[2]},
+                                        0.5f * ob->scale[0],
+                                        getCUSTOM_MaterialfromNodeTree(mesh->mat[0]->nodetree)));
+      }
+      else {
+        BLI_addtail(&pd->bvh_nodes,
+                    CUSTOM_SphereCreate((float[3]){loc[0], loc[1], loc[2]},
+                                        0.5f * ob->scale[0],
+                                        default_material));
       }
     }
-
-    if (strncmp("OBSphere", ob->id.name, 8) == 0) {
-      BLI_addtail(
-          &pd->bvh_nodes,
-          CUSTOM_SphereCreate((float[3]){loc[0], loc[1], loc[2]}, 0.5f * ob->scale[0], material));
-    }
-    /* else if (strncmp("OBCube", ob->id.name, 6) == 0) {
-       float min[3], max[3];
-       madd_v3_v3v3v3(min, loc, (float[3]){-0.5f, -0.5f, -0.5f}, ob->scale);
-       madd_v3_v3v3v3(max, loc, (float[3]){0.5f, 0.5f, 0.5f}, ob->scale);
-       BLI_addtail(&pd->bvh_nodes, CUSTOM_BoxCreate(min, max, material));
-     }*/
-    /* else if (strncmp("OBPlane", ob->id.name, 7) == 0) {
-       float dimension[3];
-       BKE_object_dimensions_get(ob, dimension);
-       const MPoly *mpoly = mesh->mpoly;
-       float normal[3];
-
-       BKE_mesh_calc_poly_normal(mpoly, mesh->mloop + mpoly->loopstart, mesh->mvert, normal);
-       if (dimension[0] <= 0.001f)
-         BLI_addtail(&pd->world,
-                     CUSTOM_RectYZCreate(loc[1] - 0.5f * ob->scale[1],
-                                         loc[1] + 0.5f * ob->scale[1],
-                                         loc[2] - 0.5f * ob->scale[2],
-                                         loc[2] + 0.5f * ob->scale[2],
-                                         loc[0],
-                                         material,
-                                         normal[0] < 0.0f ? true : false));
-       else if (dimension[1] <= 0.001f)
-         BLI_addtail(&pd->world,
-                     CUSTOM_RectXZCreate(loc[0] - 0.5f * ob->scale[0],
-                                         loc[0] + 0.5f * ob->scale[0],
-                                         loc[2] - 0.5f * ob->scale[2],
-                                         loc[2] + 0.5f * ob->scale[2],
-                                         loc[1],
-                                         material,
-                                         normal[1] < 0.0f ? true : false));
-       else if (dimension[2] <= 0.001f)
-         BLI_addtail(&pd->world,
-                     CUSTOM_RectXYCreate(loc[0] - 0.5f * ob->scale[0],
-                                         loc[0] + 0.5f * ob->scale[0],
-                                         loc[1] - 0.5f * ob->scale[1],
-                                         loc[1] + 0.5f * ob->scale[1],
-                                         loc[2],
-                                         material,
-                                         normal[2] < 0.0f ? true : false));
-     }*/
     else {
       const MVert *mverts = mesh->mvert;
       const MPoly *mpolys = mesh->mpoly;
       const MLoop *mloops = mesh->mloop;
+      const MLoopUV *mloopuvs = mesh->mloopuv;
 
-      // float **world_matrix = ob->obmat;
       for (int i = 0; i < mesh->totpoly; i++) {
         // must is a triangle
         BLI_assert(mpolys[i].totloop == 3);
-        //if (mpolys[i].totloop != 3) {
-        //  puts("!!!");
-        //}
 
         const MVert *v0 = &mesh->mvert[mloops[mpolys[i].loopstart + 0].v];
         const MVert *v1 = &mesh->mvert[mloops[mpolys[i].loopstart + 1].v];
         const MVert *v2 = &mesh->mvert[mloops[mpolys[i].loopstart + 2].v];
 
+        const float *uv0, *uv1, *uv2;
+        if (mesh->mloopuv) {
+          uv0 = &mesh->mloopuv[mpolys[i].loopstart + 0].uv;
+          uv1 = &mesh->mloopuv[mpolys[i].loopstart + 1].uv;
+          uv2 = &mesh->mloopuv[mpolys[i].loopstart + 2].uv;
+        }
+        else {
+          uv0 = (float[2]){0.0, 0.0};
+          uv1 = (float[2]){0.0, 0.0};
+          uv2 = (float[2]){0.0, 0.0};
+        }
+
+        if (mesh->mat && mesh->mat[mpolys[i].mat_nr] && mesh->mat[mpolys[i].mat_nr]->use_nodes &&
+            materials[mpolys[i].mat_nr] == NULL) {
+          materials[mpolys[i].mat_nr] = getCUSTOM_MaterialfromNodeTree(
+              mesh->mat[mpolys[i].mat_nr]->nodetree);
+        }
+        const CUSTOM_Material *material = materials[mpolys[i].mat_nr];
+        if (material == NULL) {
+          material = default_material;
+        }
+
         float p0[3], p1[3], p2[3];
         mul_v3_m4v3(p0, ob->obmat, v0->co);
         mul_v3_m4v3(p1, ob->obmat, v1->co);
         mul_v3_m4v3(p2, ob->obmat, v2->co);
-
         mul_v3_fl(p0, unit_scale);
         mul_v3_fl(p1, unit_scale);
         mul_v3_fl(p2, unit_scale);
 
-        float n0[3], n1[3], n2[3];
-        normal_short_to_float_v3(n0, v0->no);
-        normal_short_to_float_v3(n1, v1->no);
-        normal_short_to_float_v3(n2, v2->no);
-
-        float normal[3];
-        BKE_mesh_calc_poly_normal(
-            &mpolys[i], mesh->mloop + mpolys[i].loopstart, mesh->mvert, normal);
-
         // p0, p1, p2 must is counter clockwise
-        //float p0p1[3], p0p2[3];
-        //sub_v3_v3v3(p0p1, p1, p0);
-        //sub_v3_v3v3(p0p2, p2, p0);
-        //float p0p1Xp0p2[3];
-        //cross_v3_v3v3(p0p1Xp0p2, p0p1, p0p2);
-
-        //if (dot_v3v3(p0p1Xp0p2, normal) < 0.0) {
-        //  BLI_addtail(&pd->bvh_nodes,
-        //              CUSTOM_TriangleCreate(p2,
-        //                                    p1,
-        //                                    p0,
-        //                                    normal,
-        //                                    normal,
-        //                                    normal,
-        //                                    (float[3]){0.0, 0.0, 0.0},
-        //                                    (float[3]){0.0, 0.0, 0.0},
-        //                                    (float[3]){0.0, 0.0, 0.0},
-        //                                    material));
-        //}
-        //else {
-        //  BLI_addtail(&pd->bvh_nodes,
-        //              CUSTOM_TriangleCreate(p0,
-        //                                    p1,
-        //                                    p2,
-        //                                    normal,
-        //                                    normal,
-        //                                    normal,
-        //                                    (float[3]){0.0, 0.0, 0.0},
-        //                                    (float[3]){0.0, 0.0, 0.0},
-        //                                    (float[3]){0.0, 0.0, 0.0},
-        //                                    material));
-        //}
-         BLI_addtail(&pd->bvh_nodes,
-                    CUSTOM_TriangleCreate(p0,
-                                          p1,
-                                          p2,
-                                          normal,
-                                          normal,
-                                          normal,
-                                          (float[3]){0.0, 0.0, 0.0},
-                                          (float[3]){0.0, 0.0, 0.0},
-                                          (float[3]){0.0, 0.0, 0.0},
-                                          material));
+        if (mpolys[i].flag & ME_SMOOTH) {
+          float n0[3], n1[3], n2[3];
+          normal_short_to_float_v3(n0, v0->no);
+          normal_short_to_float_v3(n1, v1->no);
+          normal_short_to_float_v3(n2, v2->no);
+          BLI_addtail(&pd->bvh_nodes,
+                      CUSTOM_TriangleCreate(p0, p1, p2, n0, n1, n2, uv0, uv1, uv2, material));
+        }
+        else {
+          float normal[3];
+          BKE_mesh_calc_poly_normal(
+              &mpolys[i], mesh->mloop + mpolys[i].loopstart, mesh->mvert, normal);
+          BLI_addtail(
+              &pd->bvh_nodes,
+              CUSTOM_TriangleCreate(p0, p1, p2, normal, normal, normal, uv0, uv1, uv2, material));
+        }
       }
     }
   }
