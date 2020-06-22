@@ -9,7 +9,8 @@
 
 /* local function */
 
-/* https://gamedev.stackexchange.com/questions/23743/whats-the-most-efficient-way-to-find-barycentric-coordinates */
+/* https://gamedev.stackexchange.com/questions/23743/whats-the-most-efficient-way-to-find-barycentric-coordinates
+ */
 void barycentric(float *u,
                  float *v,
                  float *w,
@@ -214,14 +215,6 @@ bool list_hit(
 
 CUSTOM_AABB surroundingBox(const CUSTOM_AABB *box0, const CUSTOM_AABB *box1)
 {
-  // point3 small(fmin(box0.min().x(), box1.min().x()),
-  //             fmin(box0.min().y(), box1.min().y()),
-  //             fmin(box0.min().z(), box1.min().z()));
-
-  // point3 big(fmax(box0.max().x(), box1.max().x()),
-  //           fmax(box0.max().y(), box1.max().y()),
-  //           fmax(box0.max().z(), box1.max().z()));
-
   CUSTOM_Vector small = {fmin(box0->min.x, box1->min.x),
                          fmin(box0->min.y, box1->min.y),
                          fmin(box0->min.z, box1->min.z)};
@@ -253,28 +246,15 @@ bool list_boundingBox(CUSTOM_AABB *output_box, const ListBase *list, float t_min
 bool AABB_hit(const CUSTOM_AABB *aabb, const CUSTOM_Ray *ray, float t_min, float t_max)
 {
   for (int a = 0; a < 3; a++) {
-    // float t0 = fmin((aabb->min.vec3[a] - ray->origin.vec3[a]) / ray->direction.vec3[a],
-    //          (aabb->max.vec3[a] - ray->origin.vec3[a]) / ray->direction.vec3[a]);
-    // float t1 = fmax((aabb->min.vec3[a] - ray->origin.vec3[a]) / ray->direction.vec3[a],
-    //          (aabb->max.vec3[a] - ray->origin.vec3[a]) / ray->direction.vec3[a]);
-
-    // t_min = fmax(t0, t_min);
-    // t_max = fmin(t1, t_max);
-
     float invD = 1.0f / ray->direction.vec3[a];
     float t0 = (aabb->min.vec3[a] - ray->origin.vec3[a]) * invD;
     float t1 = (aabb->max.vec3[a] - ray->origin.vec3[a]) * invD;
     if (invD < 0.0f) {
       SWAP(float, t0, t1);
-      // float temp = t0;
-      // t0 = t1;
-      // t1 = temp;
     };
     t_min = t0 > t_min ? t0 : t_min;
     t_max = t1 < t_max ? t1 : t_max;
 
-    // if it is plane, t_max == t_min will wrong
-    // if (t_max <= t_min)
     if (t_max < t_min)
       return false;
   }
@@ -442,7 +422,6 @@ bool CUSTOM_BoxHit(
     return true;
   else
     return false;
-  // return list_hit(rec, ray, &box->faces, t0, t1);
 }
 bool CUSTOM_TriangleHit(
     CUSTOM_HitRecord *rec, const CUSTOM_Ray *ray, const CUSTOM_Triangle *tri, float t0, float t1)
@@ -451,55 +430,32 @@ bool CUSTOM_TriangleHit(
   /* https://en.wikipedia.org/wiki/M%C3%B6ller%E2%80%93Trumbore_intersection_algorithm */
 
   const float EPSILON = 0.0000001;
-  // Vector3D vertex0 = inTriangle->vertex0;
-  // Vector3D vertex1 = inTriangle->vertex1;
-  // Vector3D vertex2 = inTriangle->vertex2;
-  // Vector3D edge1, edge2, h, s, q;
   float edge1[3], edge2[3], h[3], s[3], q[3];
-  // edge1 = vertex1 - vertex0;
-  // edge2 = vertex2 - vertex0;
   sub_v3_v3v3(edge1, tri->v1.vec3, tri->v0.vec3);
   sub_v3_v3v3(edge2, tri->v2.vec3, tri->v0.vec3);
-  // h = rayVector.crossProduct(edge2);
-  // a = edge1.dotProduct(h);
   cross_v3_v3v3(h, ray->direction.vec3, edge2);
   float a = dot_v3v3(edge1, h);
   if (a > -EPSILON && a < EPSILON)
     return false;  // This ray is parallel to this triangle.
   float f = 1.0 / a;
-  // s = rayOrigin - vertex0;
-  // u = f * s.dotProduct(h);
   sub_v3_v3v3(s, ray->origin.vec3, tri->v0.vec3);
   float u = f * dot_v3v3(s, h);
   if (u < 0.0 || u > 1.0)
     return false;
-  // q = s.crossProduct(edge1);
-  // v = f * rayVector.dotProduct(q);
   cross_v3_v3v3(q, s, edge1);
   float v = f * dot_v3v3(ray->direction.vec3, q);
   if (v < 0.0 || (double)u + (double)v > 1.0)
     return false;
   // At this stage we can compute t to find out where the intersection point is on the line.
-  // float t = f * edge2.dotProduct(q);
   float t = f * dot_v3v3(edge2, q);
 
   if (t < t0 || t > t1) {
     return false;
   }
-  // outIntersectionPoint = rayOrigin + rayVector * t;
   CUSTOM_Vector P = pointAtParameter(ray, t);
 
   /* https://codeplea.com/triangular-interpolation */
   float uv[2];
-  //float w[3] = {
-  //    1.0f / len_v3v3(P.vec3, tri->v0.vec3),
-  //    1.0f / len_v3v3(P.vec3, tri->v1.vec3),
-  //    1.0f / len_v3v3(P.vec3, tri->v2.vec3),
-  //};
-  //float w012 = w[0] + w[1] + w[2];
-  //w[0] /= w012;
-  //w[1] /= w012;
-  //w[2] /= w012;
   float w[3];
 
   barycentric(&w[0], &w[1], &w[2], P.vec3, tri->v0.vec3, tri->v1.vec3, tri->v2.vec3);
@@ -534,6 +490,57 @@ bool CUSTOM_BvhNodeHit(CUSTOM_HitRecord *rec,
   return hit_left || hit_right;
 }
 
+float ambientOcclusion(const CUSTOM_HitRecord *rec,
+                       const ListBase *world,
+                       const float occlusion_radius)
+{
+  CUSTOM_HitRecord temp_rec;
+
+  int occlusion = 0;
+  for (int i = 0; i < AO_RAY_AMOUNT; i++) {
+    float target[3];
+    CUSTOM_Vector random = randomInUnitHemisphere(&rec->normal);
+    add_v3_v3v3(target, rec->position.vec3, random.vec3);
+
+    CUSTOM_Ray ray;
+    copy_v3_v3(ray.origin.vec3, rec->position.vec3);
+    sub_v3_v3v3(ray.direction.vec3, target, rec->position.vec3);
+    normalize_v3(ray.direction.vec3);
+
+    if (list_hit(&temp_rec, &ray, world, 0.0001f, occlusion_radius)) {
+      occlusion++;
+    }
+  }
+  return (float)(AO_RAY_AMOUNT - occlusion) / AO_RAY_AMOUNT;
+}
+
+CUSTOM_Vector lighting(const CUSTOM_HitRecord *rec, const ListBase *world)
+{
+  CUSTOM_HitRecord temp_rec;
+  CUSTOM_Vector light_color = {0.0f, 0.0f, 0.0f};
+
+  int occlusion = 0;
+  for (int i = 0; i < LIGHT_RAY_AMOUNT; i++) {
+    float target[3];
+    CUSTOM_Vector random = randomInUnitSphere(&rec->normal);
+    add_v3_v3v3(target, rec->position.vec3, random.vec3);
+
+    CUSTOM_Ray ray;
+    copy_v3_v3(ray.origin.vec3, rec->position.vec3);
+    sub_v3_v3v3(ray.direction.vec3, target, rec->position.vec3);
+    normalize_v3(ray.direction.vec3);
+
+    if (list_hit(&temp_rec, &ray, world, 0.0001f, FLT_MAX)) {
+      if (temp_rec.mat_ptr > CUSTOM_MATERIAL_MAX && temp_rec.mat_ptr < CUSTOM_LIGHT_MAX) {
+        add_v3_v3(
+            light_color.vec3,
+            materialEmitted(temp_rec.u, temp_rec.v, &temp_rec.position, temp_rec.mat_ptr).vec3);
+      }
+    }
+  }
+  //mul_v3_fl(light_color.vec3, 1.0f / LIGHT_RAY_AMOUNT);
+  return light_color;
+}
 /******************************************************************
  * Sampling Color by a ray
  * Return:
@@ -546,8 +553,11 @@ bool CUSTOM_BvhNodeHit(CUSTOM_HitRecord *rec,
 CUSTOM_Vector CUSTOM_sampleColor(const CUSTOM_Ray *ray, const ListBase *world, int depth)
 {
   CUSTOM_HitRecord rec;
-  if (list_hit(&rec, ray, world, 0.01f, FLT_MAX)) {
-    // return (CUSTOM_Vector){1.0f, 0.0f, 0.0f};
+  if (list_hit(&rec, ray, world, 0.0001f, FLT_MAX)) {
+     // ao visualize
+     //float visibility = ambientOcclusion(&rec, world, 0.1f);
+     //return (CUSTOM_Vector){visibility, visibility, visibility};
+
     CUSTOM_Ray scattered;
     CUSTOM_Vector attenuation;
 
@@ -555,8 +565,17 @@ CUSTOM_Vector CUSTOM_sampleColor(const CUSTOM_Ray *ray, const ListBase *world, i
 
     if (depth < CUSTOM_RECURSIVE_MAX &&
         materialScatter(&scattered, &attenuation, ray, &rec, rec.mat_ptr)) {
-      CUSTOM_Vector color = CUSTOM_sampleColor(&scattered, world, depth + 1);
+      float visibility = ambientOcclusion(&rec, world, 0.1f);
+      CUSTOM_Vector color = CUSTOM_sampleColor(&scattered, world, depth+1);
+
+      // distribution ray tracing
+      //for (int i = 0; i < 3; i++) {
+      //  add_v3_v3(color.vec3, CUSTOM_sampleColor(&scattered, world, depth+1).vec3);
+      //}
+      //mul_v3_fl(color.vec3, 0.25f);
+
       mul_v3_v3(color.vec3, attenuation.vec3);
+      mul_v3_fl(color.vec3, visibility);
       add_v3_v3(color.vec3, emitted.vec3);
       return color;
     }
@@ -568,6 +587,7 @@ CUSTOM_Vector CUSTOM_sampleColor(const CUSTOM_Ray *ray, const ListBase *world, i
     return (CUSTOM_Vector){0.0f, 0.0f, 0.0f};
   }
 }
+
 /******************************************************************
  * Initialize Camera
  * Return:
@@ -643,8 +663,7 @@ CUSTOM_Ray CUSTOM_CameraGetRay(const CUSTOM_Camera *cam, float s, float t)
   // vec3 offset = u * rd.x() + v * rd.y();
   mul_v3_v3fl(offset, cam->u.vec3, rd[0]);
   madd_v3_v3fl(offset, cam->v.vec3, rd[1]);
-  // return ray(origin + offset, lower_left_corner + s * horizontal + t * vertical - origin -
-  // offset);
+
   CUSTOM_Vector ray_origin;
   add_v3_v3v3(ray_origin.vec3, cam->origin.vec3, offset);
   CUSTOM_Vector ray_dir;
@@ -808,7 +827,6 @@ CUSTOM_BvhNode *CUSTOM_BvhNodeCreate(const CUSTOM_Hittable **objects, size_t sta
                                                       boxCompareX :
                                                       (axis == 1) ? boxCompareY : boxCompareZ;
 
-  // int amount = BLI_listbase_count(objects);
   size_t object_span = end - start;
 
   if (object_span == 1) {
@@ -825,35 +843,16 @@ CUSTOM_BvhNode *CUSTOM_BvhNodeCreate(const CUSTOM_Hittable **objects, size_t sta
     }
   }
   else {
-    // BLI_listbase_sort(objects, comparator);
     qsort(objects, end - start, sizeof(CUSTOM_Hittable *), comparator);
 
     int mid = start + object_span / 2;
 
     node->left = (CUSTOM_Hittable *)CUSTOM_BvhNodeCreate(objects, start, mid);
     node->right = (CUSTOM_Hittable *)CUSTOM_BvhNodeCreate(objects, mid, end);
-    // ListBase left_list = {NULL, NULL};
-    // ListBase right_list = {NULL, NULL};
-    // CUSTOM_Hittable *hittable = (CUSTOM_Hittable *)objects->first;
-    // for (int i = 0; hittable; hittable = hittable->next, i++) {
-    //  if (i < mid) {
-    //    BLI_addtail(&left_list, hittable);
-    //  }
-    //  else {
-    //    BLI_addtail(&right_list, hittable);
-    //  }
-    //}
-    // left = make_shared<bvh_node>(objects, start, mid, time0, time1);
-    // right = make_shared<bvh_node>(objects, mid, end, time0, time1);
-    // node->left = (CUSTOM_Hittable*)CUSTOM_BvhNodeCreate(&left_list);
-    // node->right = (CUSTOM_Hittable *)CUSTOM_BvhNodeCreate(&right_list);
   }
 
   CUSTOM_AABB box_left, box_right;
 
-  // if (!left->bounding_box(time0, time1, box_left) || !right->bounding_box(time0, time1,
-  // box_right))
-  //  std::cerr << "No bounding box in bvh_node constructor.\n";
   if (!CUSTOM_HittableBoundingBox(&box_left, node->left) ||
       !CUSTOM_HittableBoundingBox(&box_right, node->right)) {
     puts("No bounding box in bvh_node constructor.");
@@ -1137,13 +1136,10 @@ CUSTOM_Vector CUSTOM_ImageTextureValue(const CUSTOM_ImageTexture *texture,
   int h = texture->hgt;
 
   int i = u * w;
-  // int j = (1 - v) * texture->hgt;
   int j = v * h;
 
   i = clamp_i(i, 0, w - 1);
   j = clamp_i(j, 0, h - 1);
-  // i = max(0, min(i, w - 1));
-  // j = max(0, min(j, h - 1));
 
   float r = texture->img[i + w * j].r;
   float g = texture->img[i + w * j].g;

@@ -255,6 +255,9 @@ static void custom_cache_populate(void *vedata, Object *ob)
       }
     }
     else {
+      if (strncmp("OBCube", ob->id.name, 8) == 0)
+        puts("");
+
       const MVert *mverts = mesh->mvert;
       const MPoly *mpolys = mesh->mpoly;
       const MLoop *mloops = mesh->mloop;
@@ -300,17 +303,23 @@ static void custom_cache_populate(void *vedata, Object *ob)
 
         // p0, p1, p2 must is counter clockwise
         if (mpolys[i].flag & ME_SMOOTH) {
-          float n0[3], n1[3], n2[3];
+          float n0[4], n1[4], n2[4];
           normal_short_to_float_v3(n0, v0->no);
           normal_short_to_float_v3(n1, v1->no);
           normal_short_to_float_v3(n2, v2->no);
+          n0[3] = n1[3] = n2[3] = 0.0f;
+          mul_v4_m4v4(n0, ob->obmat, n0);
+          mul_v4_m4v4(n1, ob->obmat, n1);
+          mul_v4_m4v4(n2, ob->obmat, n2);
           BLI_addtail(&pd->bvh_nodes,
                       CUSTOM_TriangleCreate(p0, p1, p2, n0, n1, n2, uv0, uv1, uv2, material));
         }
         else {
-          float normal[3];
+          float normal[4];
           BKE_mesh_calc_poly_normal(
               &mpolys[i], mesh->mloop + mpolys[i].loopstart, mesh->mvert, normal);
+          normal[3] = 0.0f;
+          mul_v4_m4v4(normal, ob->obmat, normal);
           BLI_addtail(
               &pd->bvh_nodes,
               CUSTOM_TriangleCreate(p0, p1, p2, normal, normal, normal, uv0, uv1, uv2, material));
@@ -428,6 +437,7 @@ static void custom_draw_scene(void *vedata)
 
     for (int j = ny - 1; j >= 0; j--)
       for (int i = 0; i < nx; i++) {
+        //printf("pixel[%d][%d]\n", i, j);
         float color[3];
         zero_v3(color);
         for (int s = 0; s < ns; s++) {

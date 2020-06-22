@@ -1,6 +1,8 @@
 #pragma once
 
 #define CUSTOM_RECURSIVE_MAX 10
+#define AO_RAY_AMOUNT 10
+#define LIGHT_RAY_AMOUNT 10
 
 // vector 4
 typedef union CUSTOM_Vector {
